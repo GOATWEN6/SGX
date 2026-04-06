@@ -1,0 +1,148 @@
+.container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.logo {
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.logoIcon {
+  font-size: 4rem;
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.logo h1 {
+  font-size: 2rem;
+  color: #2c5f2d;
+  margin: 0;
+}
+
+.subtitle {
+  text-align: center;
+  color: #666;
+  font-size: 1.1rem;
+  margin-bottom: 2rem;
+}
+
+.form {
+  background: #f9f9f9;
+  padding: 2rem;
+  border-radius: 12px;
+}
+
+.formGroup {
+  margin-bottom: 1.5rem;
+}
+
+.formGroup label {
+  display: block;
+  font-size: 1.1rem;
+  color: #333;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.formGroup input[type="text"],
+.formGroup select {
+  width: 100%;
+  padding: 0.75rem;
+  font-size: 1rem;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  background: white;
+  transition: border-color 0.2s;
+}
+
+.formGroup input[type="text"]:focus,
+.formGroup select:focus {
+  outline: none;
+  border-color: #2c5f2d;
+}
+
+.radioGroup {
+  display: flex;
+  gap: 2rem;
+}
+
+.radio {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.radio input {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.submitBtn {
+  width: 100%;
+  padding: 1rem 2rem;
+  font-size: 1.2rem;
+  background: #2c5f2d;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-top: 1rem;
+}
+
+.submitBtn:hover:not(:disabled) {
+  background: #1e4620;
+}
+
+.submitBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 大字模式 */
+.largeText .formGroup label {
+  font-size: 1.3rem;
+}
+
+.largeText .formGroup input,
+.largeText .formGroup select {
+  font-size: 1.2rem;
+  padding: 1rem;
+}
+
+.largeText .submitBtn {
+  font-size: 1.4rem;
+  padding: 1.25rem;
+}
+
+/* 高对比度模式 */
+.highContrast {
+  background: white;
+}
+
+.highContrast .formGroup label {
+  color: black;
+  font-weight: 700;
+}
+
+.highContrast input,
+.highContrast select {
+  border: 3px solid black;
+  background: white;
+  color: black;
+}
+
+.highContrast .submitBtn {
+  background: black;
+  color: white;
+  border: 3px solid black;
+}
+
+.highContrast .submitBtn:hover:not(:disabled) {
+  background: #333;
+}

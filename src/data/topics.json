@@ -1,0 +1,601 @@
+{
+  "version": "1.0",
+  "lastUpdated": "2026-03-10",
+  "topics": [
+    {
+      "id": "ice-break-1",
+      "category": "破冰",
+      "questions": [
+        "您今天身体感觉怎么样？",
+        "今天天气不错，您平时喜欢做什么活动？",
+        "您平时喜欢听什么类型的歌曲或音乐？"
+      ],
+      "followUps": [
+        "能多说一些吗？",
+        "那是什么情形呢？"
+      ],
+      "sensitivity": 1,
+      "phases": ["ice_breaker"],
+      "tags": ["日常生活", "兴趣爱好"],
+      "description": "轻松话题，用于建立信任"
+    },
+    {
+      "id": "ice-break-2",
+      "category": "破冰",
+      "questions": [
+        "您现在住在哪个城市/乡村？",
+        "您喜欢现在的居住环境吗？",
+        "您平时吃饭胃口怎么样？"
+      ],
+      "followUps": [
+        "那里有什么特别的吗？",
+        "您喜欢吃什么口味的菜？"
+      ],
+      "sensitivity": 1,
+      "phases": ["ice_breaker"],
+      "tags": ["日常生活", "居住环境"],
+      "description": "了解当前生活状态"
+    },
+
+    {
+      "id": "childhood-play-1",
+      "category": "童年",
+      "questions": [
+        "您小时候最喜欢玩什么游戏？",
+        "您小时候放学后一般做什么？",
+        "您小时候和邻居孩子们常玩什么？"
+      ],
+      "followUps": [
+        "这个游戏怎么玩的？",
+        "当时和谁一起玩最开心？",
+        "那是什么情景，您还记得吗？"
+      ],
+      "sensitivity": 1,
+      "phases": ["childhood"],
+      "tags": ["童年", "游戏", "伙伴"],
+      "description": "了解童年快乐时光"
+    },
+    {
+      "id": "childhood-play-2",
+      "category": "童年",
+      "questions": [
+        "您小时候有没有特别喜欢的玩具或东西？",
+        "过年时您最期待做什么？",
+        "您小时候有没有养过小动物？"
+      ],
+      "followUps": [
+        "能给我讲讲那个玩具吗？",
+        "那是什么动物？它叫什么名字？"
+      ],
+      "sensitivity": 1,
+      "phases": ["childhood"],
+      "tags": ["童年", "玩具", "动物", "春节"],
+      "description": "了解童年物品和情感寄托"
+    },
+
+    {
+      "id": "family-rules-1",
+      "category": "家庭",
+      "questions": [
+        "您小时候家里有什么规矩是必须遵守的？",
+        "您父母对孩子的教育方式是怎样的？",
+        "您家吃饭时有什么特别的规矩吗？"
+      ],
+      "followUps": [
+        "如果不遵守会怎么样？",
+        "您觉得这些规矩对您有影响吗？"
+      ],
+      "sensitivity": 1,
+      "phases": ["childhood", "family"],
+      "tags": ["家庭教育", "家规", "传统"],
+      "description": "了解家庭文化和价值观"
+    },
+    {
+      "id": "family-rules-2",
+      "category": "家庭",
+      "questions": [
+        "您父母相处的方式是怎样的？",
+        "您小时候家里气氛怎么样？",
+        "您父母会打骂孩子吗？"
+      ],
+      "followUps": [
+        "那时候您是什么感受？",
+        "这让您后来有什么想法？"
+      ],
+      "sensitivity": 2,
+      "phases": ["childhood", "family"],
+      "tags": ["家庭关系", "父母"],
+      "description": "了解家庭氛围，需注意敏感度"
+    },
+
+    {
+      "id": "siblings-1",
+      "category": "家庭",
+      "questions": [
+        "您有几个兄弟姐妹？",
+        "您和兄弟姐妹小时候关系怎么样？",
+        "您在家里排行第几？"
+      ],
+      "followUps": [
+        "您最和谁最亲近？",
+        "小时候有过什么有趣的事吗？"
+      ],
+      "sensitivity": 1,
+      "phases": ["childhood", "family"],
+      "tags": ["兄弟姐妹", "家庭关系"],
+      "description": "了解家庭结构"
+    },
+    {
+      "id": "siblings-2",
+      "category": "家庭",
+      "questions": [
+        "您兄弟姐妹中谁和您最像？",
+        "您和兄弟姐妹现在还常联系吗？",
+        "有没有哪个兄弟姐妹让您印象特别深刻？"
+      ],
+      "followUps": [
+        "为什么这么说？",
+        "有什么特别的故事吗？"
+      ],
+      "sensitivity": 2,
+      "phases": ["family"],
+      "tags": ["兄弟姐妹", "亲情"],
+      "description": "了解兄弟姐妹关系"
+    },
+
+    {
+      "id": "festivals-1",
+      "category": "传统",
+      "questions": [
+        "您小时候过年有什么特别的习俗？",
+        "您记忆中最好的一次过年是哪年？",
+        "春节时您家有什么必做的年俗？"
+      ],
+      "followUps": [
+        "能详细说说那个场景吗？",
+        "当时您多大？"
+      ],
+      "sensitivity": 1,
+      "phases": ["childhood"],
+      "tags": ["春节", "传统", "习俗"],
+      "description": "了解传统节日记忆"
+    },
+    {
+      "id": "festivals-2",
+      "category": "传统",
+      "questions": [
+        "您小时候过中秋节吃什么？",
+        "您家清明节会做什么？",
+        "您印象中还有什么特别难忘的节日？"
+      ],
+      "followUps": [
+        "那是什么味道/情景？",
+        "当时和谁一起过的？"
+      ],
+      "sensitivity": 1,
+      "phases": ["childhood", "family"],
+      "tags": ["节日", "传统", "美食"],
+      "description": "了解传统节日细节"
+    },
+
+    {
+      "id": "first-leave-home-1",
+      "category": "成长",
+      "questions": [
+        "您第一次离开家是什么时候？因为什么？",
+        "您第一次出远门去了哪里？",
+        "您第一次独自一人出远门时是什么心情？"
+      ],
+      "followUps": [
+        "那天具体是什么情形？",
+        "您父母舍得吗？"
+      ],
+      "sensitivity": 2,
+      "phases": ["education", "migration"],
+      "tags": ["成长", "离别", "独立"],
+      "description": "了解成长中的重要时刻"
+    },
+    {
+      "id": "first-leave-home-2",
+      "category": "成长",
+      "questions": [
+        "您第一次离开家时想念家里什么？",
+        "您第一次出门时带了什么特别的东西吗？",
+        "后来您想家的时候怎么办？"
+      ],
+      "followUps": [
+        "那东西有什么特别的意义吗？",
+        "那是什么感觉？"
+      ],
+      "sensitivity": 2,
+      "phases": ["education", "migration"],
+      "tags": ["思乡", "成长", "情感"],
+      "description": "了解离家情感"
+    },
+
+    {
+      "id": "first-job-1",
+      "category": "职业",
+      "questions": [
+        "您的第一份工作是什么？",
+        "您是怎么找到第一份工作的？",
+        "您还记得第一天上班的情形吗？"
+      ],
+      "followUps": [
+        "那时候工资多少？",
+        "同事们好吗？"
+      ],
+      "sensitivity": 1,
+      "phases": ["career"],
+      "tags": ["工作", "职业", "起点"],
+      "description": "了解职业生涯起点"
+    },
+    {
+      "id": "first-job-2",
+      "category": "职业",
+      "questions": [
+        "您最难忘的工作经历是什么？",
+        "您在工作中最骄傲的一件事是什么？",
+        "您工作中有没有遇到过特别困难的事？"
+      ],
+      "followUps": [
+        "那是怎么解决的？",
+        "那时候您是什么心情？"
+      ],
+      "sensitivity": 2,
+      "phases": ["career"],
+      "tags": ["工作", "成就", "困难"],
+      "description": "了解工作经历"
+    },
+
+    {
+      "id": "wage-memory-1",
+      "category": "时代记忆",
+      "questions": [
+        "您记得刚开始工作时候一个月工资是多少吗？",
+        "那时候物价怎么样？",
+        "您记得最早买过最贵的东西是什么吗？"
+      ],
+      "followUps": [
+        "那时候钱够花吗？",
+        "买那个东西有什么故事吗？"
+      ],
+      "sensitivity": 1,
+      "phases": ["career", "migration"],
+      "tags": ["物价", "工资", "时代记忆"],
+      "description": "了解时代经济记忆"
+    },
+    {
+      "id": "wage-memory-2",
+      "category": "时代记忆",
+      "questions": [
+        "您记得什么东西是凭票供应的吗？",
+        "那时候粮票、布票都用过吗？",
+        "您记得最早的\"万元户\"吗？"
+      ],
+      "followUps": [
+        "那是什么情形？",
+        "您家当时是什么情况？"
+      ],
+      "sensitivity": 1,
+      "phases": ["migration"],
+      "tags": ["票证", "计划经济", "时代记忆"],
+      "description": "了解计划经济时代记忆"
+    },
+
+    {
+      "id": "love-1",
+      "category": "婚恋",
+      "questions": [
+        "您是怎么认识您老伴的？",
+        "您谈恋爱那会儿有什么有趣的事吗？",
+        "您第一次约会去的哪里？"
+      ],
+      "followUps": [
+        "您当时是什么感觉？",
+        "对方给您什么印象？"
+      ],
+      "sensitivity": 2,
+      "phases": ["family"],
+      "tags": ["恋爱", "婚姻", "浪漫"],
+      "description": "了解恋爱经历，需注意尊重隐私"
+    },
+    {
+      "id": "love-2",
+      "category": "婚恋",
+      "questions": [
+        "您结婚那年多大？",
+        "您当年婚礼是什么样的？",
+        "您结婚那天记得最清楚的是什么？"
+      ],
+      "followUps": [
+        "那是什么情景？",
+        "您穿的是什么？"
+      ],
+      "sensitivity": 2,
+      "phases": ["family"],
+      "tags": ["婚礼", "婚姻", "重要时刻"],
+      "description": "了解婚礼细节"
+    },
+
+    {
+      "id": "migration-1",
+      "category": "迁徙",
+      "questions": [
+        "您搬过几次家？",
+        "您最难忘的一次搬家是因为什么？",
+        "您是从什么时候开始在这个城市/地方生活的？"
+      ],
+      "followUps": [
+        "为什么要搬？",
+        "那时候带走了什么重要的东西？"
+      ],
+      "sensitivity": 2,
+      "phases": ["migration"],
+      "tags": ["搬家", "迁徙", "地理"],
+      "description": "了解迁徙经历"
+    },
+    {
+      "id": "migration-2",
+      "category": "迁徙",
+      "questions": [
+        "您刚来到这个城市时是什么感觉？",
+        "刚到这里时有什么不习惯的吗？",
+        "您是怎么慢慢适应新地方的？"
+      ],
+      "followUps": [
+        "有什么困难吗？",
+        "谁帮助了您？"
+      ],
+      "sensitivity": 2,
+      "phases": ["migration"],
+      "tags": ["适应", "新环境", "挑战"],
+      "description": "了解适应新环境的过程"
+    },
+
+    {
+      "id": "skills-1",
+      "category": "生活技能",
+      "questions": [
+        "您最擅长做什么菜/家务？",
+        "您是从谁那里学到这些手艺的？",
+        "您家里有没有什么传下来的老手艺？"
+      ],
+      "followUps": [
+        "能教我做一下吗？",
+        "这手艺有什么特别的吗？"
+      ],
+      "sensitivity": 1,
+      "phases": ["childhood", "family"],
+      "tags": ["烹饪", "手艺", "传承"],
+      "description": "了解生活技能和传承"
+    },
+    {
+      "id": "skills-2",
+      "category": "生活技能",
+      "questions": [
+        "您小时候干过农活吗？",
+        "您最难忘的一次干农活是什么？",
+        "那时候一般几点起床下地？"
+      ],
+      "followUps": [
+        "累不累？",
+        "那时候吃什么？"
+      ],
+      "sensitivity": 1,
+      "phases": ["childhood"],
+      "tags": ["农活", "乡村", "劳动"],
+      "description": "了解乡村生活经历"
+    },
+
+    {
+      "id": "miss-someone-1",
+      "category": "情感",
+      "questions": [
+        "您有没有特别想念的人？",
+        "您最思念的故人是哪位？",
+        "有没有什么人让您一想起来就心里温暖？"
+      ],
+      "followUps": [
+        "您和他/她有什么特别的故事吗？",
+        "您最想念他/她什么？"
+      ],
+      "sensitivity": 3,
+      "phases": ["family", "reflections"],
+      "tags": ["思念", "亲情", "故人"],
+      "description": "了解重要情感关系，需注意敏感度"
+    },
+    {
+      "id": "miss-someone-2",
+      "category": "情感",
+      "questions": [
+        "有没有一句话是您特别想对某个人说的？",
+        "如果您能再见到他/她，您会说什么？",
+        "他/她给您留下最深刻的印象是什么？"
+      ],
+      "followUps": [
+        "那是什么时候的事？",
+        "那件事为什么让您难忘？"
+      ],
+      "sensitivity": 3,
+      "phases": ["reflections"],
+      "tags": ["思念", "情感", "告别"],
+      "description": "深入情感话题，需非常温和"
+    },
+
+    {
+      "id": "hardest-time-1",
+      "category": "困难",
+      "questions": [
+        "您一生中最困难的时候是什么时候？",
+        "有没有一段时间让您觉得特别难熬？",
+        "您最艰难的时期是怎么过来的？"
+      ],
+      "followUps": [
+        "是什么让您坚持下来的？",
+        "有没有人帮助过您？"
+      ],
+      "sensitivity": 4,
+      "phases": ["challenges"],
+      "tags": ["困难", "坚韧", "转折"],
+      "description": "高敏感话题，需非常小心"
+    },
+    {
+      "id": "hardest-time-2",
+      "category": "困难",
+      "questions": [
+        "您觉得自己最不容易的是什么时候？",
+        "您有没有遇到过特别大的挫折？",
+        "您是怎么从低谷走出来的？"
+      ],
+      "followUps": [
+        "那段时间您在想什么？",
+        "是什么让您重新振作的？"
+      ],
+      "sensitivity": 4,
+      "phases": ["challenges"],
+      "tags": ["挫折", "成长", "心理"],
+      "description": "高敏感话题，需注意心理状态"
+    },
+
+    {
+      "id": "proudest-1",
+      "category": "成就",
+      "questions": [
+        "您最自豪的一件事是什么？",
+        "您觉得自己最成功的经历是什么？",
+        "有没有什么事让您觉得特别有成就感？"
+      ],
+      "followUps": [
+        "能详细说说吗？",
+        "那时候您是什么感觉？"
+      ],
+      "sensitivity": 1,
+      "phases": ["proud_moments"],
+      "tags": ["成就", "自豪", "成功"],
+      "description": "了解人生高光时刻"
+    },
+    {
+      "id": "proudest-2",
+      "category": "成就",
+      "questions": [
+        "您做过的最令自己骄傲的事是什么？",
+        "有没有什么事是您付出很多努力才做到的？",
+        "您觉得这辈子做的最对的选择是什么？"
+      ],
+      "followUps": [
+        "那个选择改变了什么？",
+        "如果重来您还会这样选吗？"
+      ],
+      "sensitivity": 2,
+      "phases": ["proud_moments", "reflections"],
+      "tags": ["选择", "成就", "自我认知"],
+      "description": "了解人生重要选择"
+    },
+
+    {
+      "id": "life-choice-1",
+      "category": "转折",
+      "questions": [
+        "您觉得什么选择改变了您的一生？",
+        "您做过的最重要的决定是什么？",
+        "有没有一个选择当时做起来很不容易？"
+      ],
+      "followUps": [
+        "那个选择的前景是什么？",
+        "您是怎么下决心的？"
+      ],
+      "sensitivity": 2,
+      "phases": ["challenges", "reflections"],
+      "tags": ["选择", "命运", "转折"],
+      "description": "了解人生重要转折"
+    },
+    {
+      "id": "life-choice-2",
+      "category": "转折",
+      "questions": [
+        "您有没有后悔过什么选择？",
+        "如果能回到过去，您会做什么不同的选择吗？",
+        "您有什么经验想告诉年轻人关于做选择的？"
+      ],
+      "followUps": [
+        "为什么这么说？",
+        "那您有什么建议？"
+      ],
+      "sensitivity": 3,
+      "phases": ["reflections"],
+      "tags": ["后悔", "经验", "人生智慧"],
+      "description": "需注意处理后悔情绪"
+    },
+
+    {
+      "id": "opinion-youth-1",
+      "category": "思考",
+      "questions": [
+        "您觉得现在的年轻人和您那时候有什么不同？",
+        "您怎么看现在年轻人的生活方式？",
+        "有什么事情是您觉得年轻人应该注意的？"
+      ],
+      "followUps": [
+        "为什么您会这么认为？",
+        "您那时候是什么样的？"
+      ],
+      "sensitivity": 1,
+      "phases": ["reflections"],
+      "tags": ["代际", "观察", "建议"],
+      "description": "了解对后辈的期望"
+    },
+    {
+      "id": "opinion-youth-2",
+      "category": "思考",
+      "questions": [
+        "您觉得什么品质对年轻人最重要？",
+        "如果让您给孙子/孙女一句忠告，您会说什么？",
+        "您希望年轻人记住什么？"
+      ],
+      "followUps": [
+        "为什么您觉得这个最重要？",
+        "您年轻时有这样的机会吗？"
+      ],
+      "sensitivity": 1,
+      "phases": ["legacy"],
+      "tags": ["传承", "建议", "期望"],
+      "description": "了解传承意愿"
+    },
+
+    {
+      "id": "legacy-message-1",
+      "category": "传承",
+      "questions": [
+        "您最想留给后代的一句话是什么？",
+        "您有什么想对家人说的心里话？",
+        "如果让您写一封信给子孙后代，您会写什么？"
+      ],
+      "followUps": [
+        "为什么您想说这个？",
+        "您希望他们怎么理解这些话？"
+      ],
+      "sensitivity": 2,
+      "phases": ["legacy"],
+      "tags": ["传承", "遗言", "家书"],
+      "description": "了解传承信息"
+    },
+    {
+      "id": "legacy-message-2",
+      "category": "传承",
+      "questions": [
+        "您觉得自己这辈子活得值吗？",
+        "您希望别人怎么记住您？",
+        "您觉得人生最重要的是什么？"
+      ],
+      "followUps": [
+        "为什么您这么说？",
+        "您后悔什么吗？"
+      ],
+      "sensitivity": 3,
+      "phases": ["legacy", "reflections"],
+      "tags": ["人生总结", "价值观", "自我评价"],
+      "description": "深度人生话题，需温和对待"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "root": true,
+  "extends": [
+    "next/core-web-vitals"
+  ],
+  "rules": {
+    // 最佳实践
+    "no-console": "off",
+    "no-debugger": "warn",
+    // React
+    "react/no-unescaped-entities": "off"
+  },
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2022": true
+  }
+}

@@ -1,0 +1,36 @@
+.container {
+  padding: 1rem 1.5rem;
+  background: white;
+  border-bottom: 1px solid #eee;
+}
+
+.info {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.phase {
+  font-size: 0.95rem;
+  color: #666;
+}
+
+.percent {
+  font-size: 0.95rem;
+  color: #2c5f2d;
+  font-weight: 600;
+}
+
+.bar {
+  height: 8px;
+  background: #e8e8e8;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2c5f2d, #4a9c5d);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}

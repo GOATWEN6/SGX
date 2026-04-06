@@ -1,0 +1,214 @@
+{
+  "version": "1.0",
+  "lastUpdated": "2026-03-10",
+  "styles": [
+    {
+      "id": "narrative",
+      "name": "朴素记叙",
+      "description": "平实清楚、时间线稳定的叙述方式，适合喜欢简洁风格的读者",
+      "sentenceLength": "medium",
+      "wordDensity": "medium",
+      "useImagery": false,
+      "usePhilosophy": false,
+      "preserveColloquial": false,
+      "emotionalIntensity": "restrained",
+      "suitableThemes": ["career", "family", "migration", "achievement"],
+      "suitableTypes": ["chapter", "short_essay", "oral_history"],
+      "prohibited": [
+        "过度煽情的形容词",
+        "哲理说教",
+        "过多的环境描写",
+        "诗歌化的表达"
+      ],
+      "example": "我1958年进了钢铁厂，先从学徒做起。那时候年轻，什么都愿意学。师傅姓王，是个严厉的人，但教东西很认真。我跟着他学了三年，后来才慢慢独立操作机床。",
+      "characteristics": {
+        "句长": "中等偏短",
+        "修辞": "少",
+        "情感": "内敛",
+        "时间感": "清晰"
+      }
+    },
+    {
+      "id": "lyrical",
+      "name": "清丽抒情",
+      "description": "细腻、节制、景中含情的风格，适合喜欢文学性的读者",
+      "sentenceLength": "medium",
+      "wordDensity": "high",
+      "useImagery": true,
+      "usePhilosophy": false,
+      "preserveColloquial": false,
+      "emotionalIntensity": "moderate",
+      "suitableThemes": ["family", "love", "nostalgia", "tradition"],
+      "suitableTypes": ["short_essay", "fragment", "letter"],
+      "prohibited": [
+        "过度煽情",
+        "直白的情感表达",
+        "口语化表达",
+        "流水账式叙述"
+      ],
+      "example": "老屋门前的那棵枣树，每年秋天都结满红玛瑙似的枣子。奶奶坐在树下择菜，阳光透过枝叶在她脸上投下斑驳的影子。那时候的风是凉的，带着泥土的气息和桂花的香味。那些日子像一本泛黄的书，每一页都写着温暖。",
+      "characteristics": {
+        "句长": "中等",
+        "修辞": "丰富（比喻、意象）",
+        "情感": "细腻含蓄",
+        "时间感": "柔和"
+      }
+    },
+    {
+      "id": "rustic",
+      "name": "乡土温润",
+      "description": "有地方感、人情味、自然气息的风格，适合讲述乡村记忆",
+      "sentenceLength": "short",
+      "wordDensity": "medium",
+      "useImagery": true,
+      "usePhilosophy": false,
+      "preserveColloquial": true,
+      "emotionalIntensity": "moderate",
+      "suitableThemes": ["childhood", "family", "tradition", "nature"],
+      "suitableTypes": ["short_essay", "chapter", "oral_history"],
+      "prohibited": [
+        "过度书面化的语言",
+        "城市化的比喻",
+        "生僻词汇",
+        "空洞的哲理"
+      ],
+      "example": "我们那村子小，归里包堆就百十户人家。村东头有条小河，夏天孩子们都去洗澡、抓鱼。娘在河边洗衣裳，棒槌声一下一下的，传老远。傍晚时分，家家户户的炊烟起来了，整个村子笼罩在柴火味里。那会儿日子苦，但人与人近，谁家有点啥事，全村都知道了。",
+      "characteristics": {
+        "句长": "短",
+        "修辞": "口语、方言",
+        "情感": "温暖",
+        "时间感": "生活化"
+      }
+    },
+    {
+      "id": "daily",
+      "name": "温厚日常",
+      "description": "从生活琐事见情感，适合讲述平凡生活中的温暖",
+      "sentenceLength": "medium",
+      "wordDensity": "medium",
+      "useImagery": false,
+      "usePhilosophy": false,
+      "preserveColloquial": false,
+      "emotionalIntensity": "moderate",
+      "suitableThemes": ["family", "daily_life", "marriage", "parenting"],
+      "suitableTypes": ["short_essay", "chapter", "family_preface"],
+      "prohibited": [
+        "戏剧化的情节",
+        "过度的浪漫化",
+        "生硬的转折",
+        "刻意的煽情"
+      ],
+      "example": "老头子走了以后，我一个人住在老房子里。早上还是习惯性地做两个人的饭，盛到碗里才想起就我一个人。这些年就这么过来的，孩子们孝顺，要接我去城里住，我不去。院子里还有他种的那棵石榴树，每年都结果，他走那天石榴正好开花了，红艳艳的。",
+      "characteristics": {
+        "句长": "中等",
+        "修辞": "白描",
+        "情感": "克制深沉",
+        "时间感": "平淡"
+      }
+    },
+    {
+      "id": "philosophical",
+      "name": "哲思沉静",
+      "description": "适合晚年回望、命运感、自我反思的内容",
+      "sentenceLength": "long",
+      "wordDensity": "high",
+      "useImagery": false,
+      "usePhilosophy": true,
+      "preserveColloquial": false,
+      "emotionalIntensity": "restrained",
+      "suitableThemes": ["wisdom", "reflections", "life", "change"],
+      "suitableTypes": ["chapter", "fragment", "letter"],
+      "prohibited": [
+        "说教式的表达",
+        "过于抽象的表述",
+        "空洞的人生哲理",
+        "过度个人化的情绪"
+      ],
+      "example": "活到这个岁数，慢慢明白了一些道理。人生不像戏，没有那么多高潮迭起，更多是平平淡淡的日子。年轻时候觉得要干一番大事，现在回想，那些所谓的小事反而记得更清楚。人不就是这样吗？回望一生，不是看你得到了什么，而是看你留下了什么。我不后悔，虽然也有遗憾，但这就是日子，是实实在在的日子。",
+      "characteristics": {
+        "句长": "长",
+        "修辞": "思辨",
+        "情感": "沉静",
+        "时间感": "回望"
+      }
+    },
+    {
+      "id": "letter",
+      "name": "家书口吻",
+      "description": "像写给子女晚辈的书信，适合家书、遗言类内容",
+      "sentenceLength": "short",
+      "wordDensity": "low",
+      "useImagery": false,
+      "usePhilosophy": false,
+      "preserveColloquial": true,
+      "emotionalIntensity": "moderate",
+      "suitableThemes": ["family", "legacy", "advice", "love"],
+      "suitableTypes": ["letter", "family_preface"],
+      "prohibited": [
+        "过于正式的语言",
+        "复杂的修辞",
+        "生硬的表达",
+        "说教"
+      ],
+      "example": "孩子们：写信这事儿我不太熟练，你们别笑我。我这辈子没什么大本事，就是把你们拉扯大了。看到你们现在都各有各的日子，我高兴。你们要好好做人，踏踏实实的，别贪小便宜。夫妻之间要相互让着点，没有过不去的坎。没什么其他要说的了，就是想你们。",
+      "characteristics": {
+        "句长": "短",
+        "修辞": "口语、亲切",
+        "情感": "真挚",
+        "时间感": "现在"
+      }
+    },
+    {
+      "id": "oral",
+      "name": "口述实录",
+      "description": "保留口语质感，适合原声整理，让读者仿佛在听老人讲述",
+      "sentenceLength": "varied",
+      "wordDensity": "low",
+      "useImagery": false,
+      "usePhilosophy": false,
+      "preserveColloquial": true,
+      "emotionalIntensity": "moderate",
+      "suitableThemes": ["all"],
+      "suitableTypes": ["oral_history", "chapter", "short_essay"],
+      "prohibited": [
+        "过度书面化",
+        "人为的文学加工",
+        "删除口语习惯",
+        "添加未说的细节"
+      ],
+      "example": "哎呀，你问这个啊，让我想想……那年啊，我大概十六七岁吧具体年份我记不太清了反正就是六几年那会儿。那年变化大呢，我们家从村里搬到县城去了算是。我记得走那天挺冷的，娘带着我，还有我弟弟，坐那个拖拉机，突突突地走了一下午，道上全是土。到了地方一看，嘿，就两间破房子，窗户都是纸糊的。",
+      "characteristics": {
+        "句长": "变化",
+        "修辞": "口语、重复、停顿",
+        "情感": "自然",
+        "时间感": "讲述"
+      }
+    },
+    {
+      "id": "elegiac",
+      "name": "纪念追忆",
+      "description": "适合纪念故人、追忆往事的沉静风格",
+      "sentenceLength": "medium",
+      "wordDensity": "high",
+      "useImagery": true,
+      "usePhilosophy": false,
+      "preserveColloquial": false,
+      "emotionalIntensity": "restrained",
+      "suitableThemes": ["loss", "nostalgia", "memory", "family"],
+      "suitableTypes": ["fragment", "short_essay", "family_preface"],
+      "prohibited": [
+        "过度悲痛",
+        "夸张的形容词",
+        "空洞的悼念",
+        "过多的感叹"
+      ],
+      "example": "很多年了，那个下午依然记得很清楚。阳光很好，他坐在老藤椅上，手里拿着那把旧蒲扇，慢慢地扇着。窗外的槐花香一阵阵地飘进来，满屋子都是。我们谁也没说话，就那么坐着。那时候不知道那就是最后的时光，要是知道……但时光不能倒流，他走的时候很安详，像睡着了一样。",
+      "characteristics": {
+        "句长": "中等",
+        "修辞": "意象",
+        "情感": "哀而不伤",
+        "时间感": "永恒"
+      }
+    }
+  ]
+}
