@@ -82,6 +82,30 @@ export class OpenAICompatibleProvider implements LLMProvider {
     }
   }
 
+  async *stream(request: LLMRequest): AsyncIterable<string> {
+    try {
+      const stream = await this.client.chat.completions.create({
+        model: this.config.model,
+        messages: [
+          { role: 'system', content: request.systemPrompt },
+          { role: 'user', content: request.userPrompt },
+        ],
+        temperature: request.temperature ?? this.config.temperature ?? 0.7,
+        max_tokens: request.maxTokens ?? this.config.maxTokens ?? 2048,
+        response_format: request.responseFormat === 'json' ? { type: 'json_object' } : undefined,
+        stream: true,
+      });
+
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content;
+        if (delta) yield delta;
+      }
+    } catch (error) {
+      logger.error(`[${this.providerName}] LLM 流式调用失败: {error}`, { error: String(error) });
+      throw new Error(`LLM 流式调用失败 (${this.providerName}): ${error}`);
+    }
+  }
+
   getProviderName(): string {
     return this.providerName;
   }

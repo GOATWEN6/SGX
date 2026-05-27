@@ -42,6 +42,7 @@ export interface LLMResponse {
 // Provider 接口
 export interface LLMProvider {
   call(request: LLMRequest): Promise<LLMResponse>;
+  stream?(request: LLMRequest): AsyncIterable<string>;
   getProviderName(): string;
   getModel(): string;
 }

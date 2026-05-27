@@ -26,7 +26,10 @@ async function runStaticContractChecks() {
     headerWebSocketSource,
     voiceIndexSource,
     realtimeRouteSource,
+    conversationStreamRouteSource,
     voiceAssistantPageSource,
+    llmClientSource,
+    llmProviderSource,
     stateMachineCasesSource,
     secretScanSource,
   ] = await Promise.all([
@@ -40,7 +43,10 @@ async function runStaticContractChecks() {
     readText('src/lib/voice/realtime/header-websocket.ts'),
     readText('src/lib/voice/index.ts'),
     readText('src/app/api/voice/realtime/route.ts'),
+    readText('src/app/api/conversation/message/stream/route.ts'),
     readText('src/app/voice-assistant/page.tsx'),
+    readText('src/lib/llm/client.ts'),
+    readText('src/lib/llm/providers/openai-compatible.ts'),
     readText('harness/voice-assistant/state-machine-cases.json'),
     readText('scripts/voice-secret-scan.mjs'),
   ]);
@@ -108,10 +114,18 @@ async function runStaticContractChecks() {
   expect(!realtimeRouteSource.includes('realtimeSession: session'), 'realtime route does not return full session objects');
   expect(realtimeRouteSource.includes("action === 'poll_output'"), 'realtime route exposes minimal audio output polling');
   expect(realtimeRouteSource.includes('textDeltas: flushDoubaoRealtimeTextOutput'), 'realtime route returns minimal provider text deltas');
+  expect(conversationStreamRouteSource.includes('text/event-stream'), 'conversation stream route returns SSE');
+  expect(conversationStreamRouteSource.includes("write('delta'"), 'conversation stream route emits text deltas');
+  expect(llmClientSource.includes('streamLLM'), 'LLM client exposes streaming helper');
+  expect(llmProviderSource.includes('stream: true'), 'OpenAI-compatible provider requests streaming completions');
   expect(voiceAssistantPageSource.includes('MediaRecorder'), 'voice assistant page captures browser audio chunks');
   expect(voiceAssistantPageSource.includes("action: 'append_audio'"), 'voice assistant page sends realtime append_audio');
   expect(voiceAssistantPageSource.includes("action: 'poll_output'"), 'voice assistant page polls provider audio deltas');
   expect(voiceAssistantPageSource.includes('applyRealtimeTextDeltas'), 'voice assistant page updates captions from provider text deltas');
+  expect(voiceAssistantPageSource.includes('/api/conversation/message/stream'), 'voice assistant page uses streaming message endpoint');
+  expect(voiceAssistantPageSource.includes('speechQueueRef'), 'voice assistant page uses queued TTS playback');
+  expect(voiceAssistantPageSource.includes('currentUtteranceRef'), 'voice assistant page retains current utterance to prevent early TTS stop');
+  expect(voiceAssistantPageSource.includes('autoBargeInEnabled'), 'voice assistant page gates experimental auto barge-in');
   expect(voiceAssistantPageSource.includes('clearRealtimePlayback'), 'voice assistant clears realtime playback on interrupt/end');
   expect(secretScanSource.includes('provider-secret-assignment'), 'secret scan covers provider ACCESS_KEY and APP_KEY assignments');
 }

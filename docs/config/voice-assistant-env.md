@@ -56,9 +56,13 @@
 - 服务端已新增 Doubao 二进制协议 codec/translator，并在保护开关打开时发送 `StartConnection`、`StartSession`、`TaskRequest`、`ClientInterrupt`。
 - 页面已新增 provider 音频/文本增量轮询，把服务端收到的 audio delta 放入播放队列，并把 transcript delta 用于大字幕。
 - 打断会清理本地播放队列并进入服务端 realtime interrupt。
+- 文本回复已新增 `/api/conversation/message/stream` SSE 接口；OpenAI-compatible/Volcengine Ark 文本模型走 `stream: true` 时，前端大字幕会随 token 增量更新。
+- Demo fallback 的浏览器 `speechSynthesis` 已改为分句队列，保留当前 `SpeechSynthesisUtterance` 引用，减少“只播前几个字就停”的问题。
+- 页面新增电话式 UI：动态 AI 形象、麦克风音量波动、声纹条、挂断按钮、字幕开关和试验性自动打断开关。
 
 当前仍未宣称完成：
 
 - 官方真实 provider smoke。也就是在你的火山环境里确认 StartSession payload、音频容器、返回音频格式完全匹配。
 - provider audio delta 的真实播放质量和延迟。
 - 真实 10 轮电话式对话验收。
+- 自动智能打断的生产级方案。当前本地 RMS VAD 默认关闭，只能作为试验开关；下一步应复现 Silero/WebRTC VAD、LiveKit Agents 或 Pipecat 的 turn-taking/interruption 方案。

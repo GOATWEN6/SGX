@@ -42,6 +42,29 @@ export async function callLLM(
   return response.rawText;
 }
 
+export async function* streamLLM(
+  systemPrompt: string,
+  userPrompt: string,
+  options: {
+    temperature?: number;
+    maxTokens?: number;
+  } = {}
+): AsyncIterable<string> {
+  const client = getLLMClient();
+
+  if (client.stream) {
+    yield* client.stream({
+      systemPrompt,
+      userPrompt,
+      temperature: options.temperature,
+      maxTokens: options.maxTokens,
+    });
+    return;
+  }
+
+  yield await callLLM(systemPrompt, userPrompt, options);
+}
+
 /**
  * 调用 LLM 并返回完整响应
  */

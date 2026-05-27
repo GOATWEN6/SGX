@@ -257,11 +257,18 @@ async function staticFrontendChecks() {
   expect(standalonePageSource.includes('AI 语音助手'), '存在独立 AI 语音助手页面');
   expect(standalonePageSource.includes("body: JSON.stringify({ mode: 'web_voice_call', conversationType: 'ai_chat' })"), '独立页面启动 web_voice_call 对话');
   expect(standalonePageSource.includes('startBargeInMonitor'), '独立页面包含自动打断 VAD 逻辑');
+  expect(standalonePageSource.includes('/api/conversation/message/stream'), '独立页面使用流式文字回复接口');
+  expect(standalonePageSource.includes('speechQueueRef'), '独立页面使用 TTS 分句队列');
+  expect(standalonePageSource.includes('currentUtteranceRef'), '独立页面保留 SpeechSynthesisUtterance 引用');
+  expect(standalonePageSource.includes('startMicMeter'), '独立页面包含麦克风音量波动检测');
+  expect(standalonePageSource.includes('autoBargeInEnabled'), '独立页面把试验性自动打断做成显式开关');
   expect(standalonePageSource.includes("action: 'append_audio'"), '独立页面会上传 realtime 音频 chunk');
   expect(standalonePageSource.includes("action: 'poll_output'"), '独立页面会轮询 provider audio delta');
   expect(standalonePageSource.includes('/api/memory/candidates/${candidateId}/${action}'), '独立页面支持候选记忆确认/拒绝');
   expect(standaloneStyleSource.includes('.captionPanel'), '独立页面包含大字幕样式');
-  expect(standaloneStyleSource.includes('.primaryButton'), '独立页面包含主语音按钮样式');
+  expect(standaloneStyleSource.includes('.micButton'), '独立页面包含主语音按钮样式');
+  expect(standaloneStyleSource.includes('.soundWave'), '独立页面包含动态声纹样式');
+  expect(standaloneStyleSource.includes('.avatar'), '独立页面包含动态 AI 形象样式');
 }
 
 function printReport() {
@@ -270,7 +277,7 @@ function printReport() {
   const issues = [
     'Doubao 二进制协议 codec/translator 已接入，但真实 provider smoke 仍需要用户配置 DOUBAO_REALTIME_FORWARD_BINARY_PROTOCOL=true 后验收。',
     '浏览器端当前用 MediaRecorder 输出 WebM/Opus chunk；如果上游只接受 raw Opus 或 PCM，需要下一步改 AudioWorklet PCM16。',
-    '浏览器端已补轻量 Web Audio VAD 自动打断，但仍不能等同真实全双工 RTC：会受设备回声、环境噪声、浏览器权限和 TTS 外放影响。',
+    '浏览器端已把轻量 Web Audio VAD 做成试验性开关；真实智能打断仍需接入 WebRTC/Silero/LiveKit/Pipecat 类更可靠方案。',
     '联网工具默认未配置 SEARCH_API_ENDPOINT 时不会产生真实 citations，天气/新闻只能证明意图识别和安全降级。',
     'LLM 未配置时会走 fallback 回复，无法验证真实模型口语质量、追问质量和 prompt 遵循。',
     '记忆候选提取是规则型关键词，容易漏掉隐含偏好、复杂家庭关系和方言表达，也可能把长句误判为 quote。',

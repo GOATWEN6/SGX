@@ -21,6 +21,7 @@ import {
   ConversationSession,
   ConversationType,
   MemoryCandidate,
+  SearchToolResult,
   ToolCitation,
 } from '@/types';
 
@@ -66,6 +67,15 @@ function buildFallbackReply(userName: string, message: string, riskFlags: string
   return `${userName}，我听到了。我们慢慢聊，不着急。您刚才说的这点挺重要，我想轻轻问一句：这件事当时最让您记得的是什么？`;
 }
 
+export function buildConversationFallbackReply(
+  userName: string,
+  message: string,
+  riskFlags: string[],
+  usedSearch: boolean
+): string {
+  return buildFallbackReply(userName, message, riskFlags, usedSearch);
+}
+
 function buildSummaryBullets(messages: ReturnType<typeof getSessionMessages>): string[] {
   const userMessages = messages.filter(m => m.role === 'user').map(m => m.content.trim()).filter(Boolean);
   if (!userMessages.length) return ['本次通话没有形成明确内容。'];
@@ -92,18 +102,25 @@ export function startConversationSession(params: {
   });
 }
 
-export async function processConversationMessage(params: {
+export interface PreparedConversationTurn {
   userId: string;
-  sessionId: string;
-  message: string;
-}): Promise<{
-  message: string;
+  userName: string;
   session: ConversationSession;
+  text: string;
+  systemPrompt: string;
+  userPrompt: string;
   memoryCandidates: MemoryCandidate[];
   citations: ToolCitation[];
   riskFlags: string[];
   usedWebSearch: boolean;
-}> {
+  searchResult: SearchToolResult | null;
+}
+
+export async function prepareConversationTurn(params: {
+  userId: string;
+  sessionId: string;
+  message: string;
+}): Promise<PreparedConversationTurn> {
   const user = getUserById(params.userId);
   const session = getConversationSessionById(params.sessionId);
   if (!user || !session || session.userId !== params.userId) {
@@ -149,24 +166,6 @@ export async function processConversationMessage(params: {
     `本轮老人输入：${text}`,
   ].join('\n\n');
 
-  let assistantText: string;
-  try {
-    assistantText = await callLLM(systemPrompt, userPrompt, { temperature: 0.65, maxTokens: 420 });
-  } catch {
-    assistantText = buildFallbackReply(user.name, text, riskFlags, Boolean(searchResult));
-  }
-
-  addMessage({
-    sessionId: session.id,
-    role: 'assistant',
-    content: assistantText,
-    timestamp: new Date().toISOString(),
-    isQuestion: /[？?]$/.test(assistantText.trim()),
-    isFollowUp: true,
-    phase: user.currentPhase,
-    containsSensitiveTopic: riskFlags.length > 0,
-  });
-
   const candidates = extractMemoryCandidatesFromText({
     userId: params.userId,
     sourceSessionId: session.id,
@@ -174,22 +173,83 @@ export async function processConversationMessage(params: {
     text,
   });
 
-  const updatedSession = updateConversationSession(session.id, {
-    turnCount: session.turnCount + 1,
-    usedWebSearch: session.usedWebSearch || Boolean(searchResult),
-    citations: [...session.citations, ...(searchResult?.citations || [])],
-    riskFlags: Array.from(new Set([...session.riskFlags, ...riskFlags])),
-    lastState: 'listening',
-  }) || session;
-
   return {
-    message: assistantText,
-    session: updatedSession,
+    userId: params.userId,
+    userName: user.name,
+    session,
+    text,
+    systemPrompt,
+    userPrompt,
     memoryCandidates: candidates,
     citations: searchResult?.citations || [],
     riskFlags,
     usedWebSearch: Boolean(searchResult),
+    searchResult,
   };
+}
+
+export function completeConversationTurn(
+  prepared: PreparedConversationTurn,
+  assistantText: string
+): {
+  message: string;
+  session: ConversationSession;
+  memoryCandidates: MemoryCandidate[];
+  citations: ToolCitation[];
+  riskFlags: string[];
+  usedWebSearch: boolean;
+} {
+  addMessage({
+    sessionId: prepared.session.id,
+    role: 'assistant',
+    content: assistantText,
+    timestamp: new Date().toISOString(),
+    isQuestion: /[？?]$/.test(assistantText.trim()),
+    isFollowUp: true,
+    phase: getUserById(prepared.userId)?.currentPhase || 'ice_breaker',
+    containsSensitiveTopic: prepared.riskFlags.length > 0,
+  });
+
+  const updatedSession = updateConversationSession(prepared.session.id, {
+    turnCount: prepared.session.turnCount + 1,
+    usedWebSearch: prepared.session.usedWebSearch || prepared.usedWebSearch,
+    citations: [...prepared.session.citations, ...prepared.citations],
+    riskFlags: Array.from(new Set([...prepared.session.riskFlags, ...prepared.riskFlags])),
+    lastState: 'listening',
+  }) || prepared.session;
+
+  return {
+    message: assistantText,
+    session: updatedSession,
+    memoryCandidates: prepared.memoryCandidates,
+    citations: prepared.citations,
+    riskFlags: prepared.riskFlags,
+    usedWebSearch: prepared.usedWebSearch,
+  };
+}
+
+export async function processConversationMessage(params: {
+  userId: string;
+  sessionId: string;
+  message: string;
+}): Promise<{
+  message: string;
+  session: ConversationSession;
+  memoryCandidates: MemoryCandidate[];
+  citations: ToolCitation[];
+  riskFlags: string[];
+  usedWebSearch: boolean;
+}> {
+  const prepared = await prepareConversationTurn(params);
+
+  let assistantText: string;
+  try {
+    assistantText = await callLLM(prepared.systemPrompt, prepared.userPrompt, { temperature: 0.65, maxTokens: 420 });
+  } catch {
+    assistantText = buildFallbackReply(prepared.userName, prepared.text, prepared.riskFlags, prepared.usedWebSearch);
+  }
+
+  return completeConversationTurn(prepared, assistantText);
 }
 
 export function endConversationSession(params: {

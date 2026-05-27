@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Mic, PhoneOff, Send, Square, Volume2 } from 'lucide-react';
+import { MessageCircle, Mic, Monitor, PhoneOff, Send, Square, Volume2 } from 'lucide-react';
 import { authenticatedFetch, getToken, setAuth } from '@/lib/client-auth';
 import styles from './voice-assistant.module.css';
 
@@ -11,6 +11,7 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  streaming?: boolean;
 }
 
 interface MemoryCandidateLite {
@@ -96,6 +97,26 @@ function base64ToBlob(base64Audio: string, mimeType: string): Blob {
   return new Blob([bytes], { type: mimeType });
 }
 
+function splitForSpeech(text: string): string[] {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return [];
+  const parts = normalized.match(/[^。！？!?；;，,、\n]+[。！？!?；;，,、\n]?/g) || [normalized];
+  const chunks: string[] = [];
+  for (const part of parts) {
+    let rest = part.trim();
+    while (rest.length > 70) {
+      chunks.push(rest.slice(0, 70));
+      rest = rest.slice(70);
+    }
+    if (rest) chunks.push(rest);
+  }
+  return chunks;
+}
+
+function shouldFlushSpeechBuffer(text: string): boolean {
+  return /[。！？!?；;\n]$/.test(text.trim()) || text.length >= 36;
+}
+
 export default function VoiceAssistantPage() {
   const [voiceState, setVoiceState] = useState<VoiceState>('booting');
   const [conversationSessionId, setConversationSessionId] = useState<string | null>(null);
@@ -107,9 +128,23 @@ export default function VoiceAssistantPage() {
   const [notice, setNotice] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [showCaptions, setShowCaptions] = useState(true);
+  const [autoBargeInEnabled, setAutoBargeInEnabled] = useState(false);
+  const [voiceLevel, setVoiceLevel] = useState(0);
   const [memoryCandidates, setMemoryCandidates] = useState<MemoryCandidateLite[]>([]);
 
   const recognitionRef = useRef<any>(null);
+  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const speechQueueRef = useRef<string[]>([]);
+  const speechBufferRef = useRef('');
+  const isSpeechQueueActiveRef = useRef(false);
+  const assistantSpeechStartedAtRef = useRef(0);
+  const autoConversationRef = useRef(false);
+  const suppressRecognitionEndRef = useRef(false);
+  const micMeterStreamRef = useRef<MediaStream | null>(null);
+  const micMeterContextRef = useRef<AudioContext | null>(null);
+  const micMeterAnalyserRef = useRef<AnalyserNode | null>(null);
+  const micMeterIntervalRef = useRef<number | null>(null);
   const voiceStateRef = useRef<VoiceState>('booting');
   const isSpeakingRef = useRef(false);
   const voiceSessionIdRef = useRef<string | null>(null);
@@ -155,6 +190,50 @@ export default function VoiceAssistantPage() {
     realtimeFallbackModeRef.current = realtimeFallbackMode;
   }, [realtimeFallbackMode]);
 
+  const stopMicMeter = () => {
+    if (micMeterIntervalRef.current !== null) {
+      window.clearInterval(micMeterIntervalRef.current);
+      micMeterIntervalRef.current = null;
+    }
+    micMeterStreamRef.current?.getTracks().forEach(track => track.stop());
+    micMeterStreamRef.current = null;
+    micMeterContextRef.current?.close().catch(() => {});
+    micMeterContextRef.current = null;
+    micMeterAnalyserRef.current = null;
+    setVoiceLevel(0);
+  };
+
+  const startMicMeter = async (existingStream?: MediaStream) => {
+    if (!navigator.mediaDevices?.getUserMedia || micMeterIntervalRef.current !== null) return;
+    try {
+      const stream = existingStream || await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+      const context = new AudioContextCtor();
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 512;
+      context.createMediaStreamSource(stream).connect(analyser);
+      if (!existingStream) micMeterStreamRef.current = stream;
+      micMeterContextRef.current = context;
+      micMeterAnalyserRef.current = analyser;
+
+      const samples = new Uint8Array(analyser.fftSize);
+      micMeterIntervalRef.current = window.setInterval(() => {
+        analyser.getByteTimeDomainData(samples);
+        let sumSquares = 0;
+        for (let i = 0; i < samples.length; i += 1) {
+          const centered = (samples[i] - 128) / 128;
+          sumSquares += centered * centered;
+        }
+        const rms = Math.sqrt(sumSquares / samples.length);
+        setVoiceLevel(Math.min(1, rms * 8));
+      }, 80);
+    } catch {
+      setVoiceLevel(0);
+    }
+  };
+
   const stopBargeInMonitor = () => {
     if (vadIntervalRef.current !== null) {
       window.clearInterval(vadIntervalRef.current);
@@ -172,11 +251,16 @@ export default function VoiceAssistantPage() {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
+    currentUtteranceRef.current = null;
+    speechQueueRef.current = [];
+    speechBufferRef.current = '';
+    isSpeechQueueActiveRef.current = false;
     clearRealtimePlayback();
     setIsSpeaking(false);
   };
 
   const interruptSpeech = async (reason: 'user_speech' | 'manual_stop' = 'manual_stop') => {
+    messageAbortRef.current?.abort();
     stopSpeakingNow();
     setVoiceState('interrupted');
     const activeRealtimeSessionId = realtimeSessionIdRef.current;
@@ -373,9 +457,9 @@ export default function VoiceAssistantPage() {
     mediaRecorderRef.current = null;
     realtimeStreamRef.current?.getTracks().forEach(track => track.stop());
     realtimeStreamRef.current = null;
-    stopRealtimeOutputPolling();
+    stopMicMeter();
     setIsRecording(false);
-    if (voiceStateRef.current === 'listening') setVoiceState('idle');
+    if (voiceStateRef.current === 'listening') setVoiceState(commitTurn ? 'thinking' : 'idle');
     if (commitTurn) await commitRealtimeTurn();
   };
 
@@ -398,6 +482,7 @@ export default function VoiceAssistantPage() {
       : 'audio/webm';
     realtimeMimeTypeRef.current = preferredMimeType;
     realtimeStreamRef.current = stream;
+    await startMicMeter(stream);
     const recorder = new MediaRecorder(stream, { mimeType: preferredMimeType });
     mediaRecorderRef.current = recorder;
     realtimeChunkSequenceRef.current = 0;
@@ -424,7 +509,7 @@ export default function VoiceAssistantPage() {
   };
 
   const startBargeInMonitor = async () => {
-    if (!navigator.mediaDevices?.getUserMedia || vadIntervalRef.current !== null) return;
+    if (!autoBargeInEnabled || !navigator.mediaDevices?.getUserMedia || vadIntervalRef.current !== null) return;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -445,6 +530,10 @@ export default function VoiceAssistantPage() {
           vadHitCountRef.current = 0;
           return;
         }
+        if (Date.now() - assistantSpeechStartedAtRef.current < 1200) {
+          vadHitCountRef.current = 0;
+          return;
+        }
         analyser.getByteTimeDomainData(samples);
         let sumSquares = 0;
         for (let i = 0; i < samples.length; i += 1) {
@@ -452,8 +541,8 @@ export default function VoiceAssistantPage() {
           sumSquares += centered * centered;
         }
         const rms = Math.sqrt(sumSquares / samples.length);
-        vadHitCountRef.current = rms > 0.055 ? vadHitCountRef.current + 1 : Math.max(0, vadHitCountRef.current - 1);
-        if (vadHitCountRef.current >= 3) {
+        vadHitCountRef.current = rms > 0.12 ? vadHitCountRef.current + 1 : Math.max(0, vadHitCountRef.current - 1);
+        if (vadHitCountRef.current >= 7) {
           vadHitCountRef.current = 0;
           interruptSpeech('user_speech');
         }
@@ -464,14 +553,39 @@ export default function VoiceAssistantPage() {
     }
   };
 
-  const speakText = (text: string) => {
+  const restartListeningAfterSpeech = () => {
+    if (!callActiveRef.current || !autoConversationRef.current || voiceStateRef.current === 'error') return;
+    window.setTimeout(() => {
+      if (
+        callActiveRef.current
+        && autoConversationRef.current
+        && !isSpeakingRef.current
+        && !isRecording
+        && realtimeFallbackModeRef.current
+      ) {
+        startListening({ auto: true });
+      }
+    }, 260);
+  };
+
+  const playNextSpeechChunk = () => {
+    if (isSpeechQueueActiveRef.current || !callActiveRef.current) return;
+    const next = speechQueueRef.current.shift();
+    if (!next) {
+      setIsSpeaking(false);
+      if (voiceStateRef.current === 'speaking') setVoiceState('listening');
+      restartListeningAfterSpeech();
+      return;
+    }
+
     if (!('speechSynthesis' in window)) {
       setNotice('当前浏览器不能播放语音，我会用大字幕显示回复。');
       setVoiceState('listening');
       return;
     }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
+
+    const utterance = new SpeechSynthesisUtterance(next);
+    currentUtteranceRef.current = utterance;
     utterance.lang = 'zh-CN';
     utterance.rate = 0.86;
     utterance.pitch = 1;
@@ -479,22 +593,72 @@ export default function VoiceAssistantPage() {
     if (chineseVoice) utterance.voice = chineseVoice;
     utterance.onstart = () => {
       if (!callActiveRef.current) return;
+      isSpeechQueueActiveRef.current = true;
+      assistantSpeechStartedAtRef.current = Date.now();
       void startBargeInMonitor();
       setIsSpeaking(true);
       setVoiceState('speaking');
     };
     utterance.onend = () => {
       if (!callActiveRef.current) return;
-      setIsSpeaking(false);
-      setVoiceState('listening');
+      isSpeechQueueActiveRef.current = false;
+      currentUtteranceRef.current = null;
+      window.setTimeout(playNextSpeechChunk, 80);
     };
     utterance.onerror = () => {
       if (!callActiveRef.current) return;
+      isSpeechQueueActiveRef.current = false;
+      currentUtteranceRef.current = null;
       setIsSpeaking(false);
       setVoiceState('error');
       setNotice('语音播报失败了，可以先看大字幕或用文字继续。');
     };
     window.speechSynthesis.speak(utterance);
+  };
+
+  const enqueueSpeechText = (text: string) => {
+    const chunks = splitForSpeech(text);
+    if (!chunks.length) return;
+    speechQueueRef.current.push(...chunks);
+    playNextSpeechChunk();
+  };
+
+  const queueSpeechDelta = (text: string, flush = false) => {
+    speechBufferRef.current += text;
+    if (flush || shouldFlushSpeechBuffer(speechBufferRef.current)) {
+      const next = speechBufferRef.current;
+      speechBufferRef.current = '';
+      enqueueSpeechText(next);
+    }
+  };
+
+  const speakText = (text: string) => {
+    window.speechSynthesis?.cancel();
+    speechQueueRef.current = [];
+    speechBufferRef.current = '';
+    isSpeechQueueActiveRef.current = false;
+    enqueueSpeechText(text);
+  };
+
+  const appendAssistantDelta = (text: string) => {
+    setMessages(prev => {
+      const next = [...prev];
+      const last = next[next.length - 1];
+      if (last?.role === 'assistant' && last.streaming) {
+        next[next.length - 1] = { ...last, content: `${last.content}${text}` };
+      } else {
+        next.push({ role: 'assistant', content: text, timestamp: new Date().toISOString(), streaming: true });
+      }
+      return next;
+    });
+  };
+
+  const finishAssistantStreaming = () => {
+    setMessages(prev => prev.map((message, index) => (
+      index === prev.length - 1 && message.role === 'assistant'
+        ? { ...message, streaming: false }
+        : message
+    )));
   };
 
   const boot = async () => {
@@ -573,6 +737,8 @@ export default function VoiceAssistantPage() {
       stopSpeakingNow();
       stopBargeInMonitor();
       stopRealtimeCapture(false).catch(() => {});
+      stopRealtimeOutputPolling();
+      stopMicMeter();
       clearRealtimePlayback();
     };
     // The standalone test call should boot exactly once per page entry.
@@ -585,39 +751,83 @@ export default function VoiceAssistantPage() {
     if (isSpeakingRef.current) await interruptSpeech('user_speech');
 
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: text, timestamp: new Date().toISOString() }]);
+    setMessages(prev => [
+      ...prev,
+      { role: 'user', content: text, timestamp: new Date().toISOString() },
+      { role: 'assistant', content: '', timestamp: new Date().toISOString(), streaming: true },
+    ]);
     setVoiceState('thinking');
     messageAbortRef.current?.abort();
     const abortController = new AbortController();
     messageAbortRef.current = abortController;
 
     try {
-      const response = await authenticatedFetch('/api/conversation/message', {
+      const response = await authenticatedFetch('/api/conversation/message/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: conversationSessionId, message: text }),
         signal: abortController.signal,
       });
-      const result = await response.json();
-      if (!callActiveRef.current || abortController.signal.aborted) return;
-      if (!result.success) throw new Error(result.error?.message || 'AI 回复失败');
 
-      setMessages(prev => [...prev, { role: 'assistant', content: result.data.message, timestamp: new Date().toISOString() }]);
-      if (result.data.memoryCandidates?.length) {
-        setMemoryCandidates(prev => [...result.data.memoryCandidates, ...prev]);
+      if (!response.ok || !response.body) {
+        throw new Error('流式回复启动失败');
       }
-      if (result.data.usedWebSearch && !result.data.citations?.length) {
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalData: any = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const blocks = buffer.split('\n\n');
+        buffer = blocks.pop() || '';
+
+        for (const block of blocks) {
+          const event = block.match(/^event:\s*(.+)$/m)?.[1]?.trim();
+          const dataText = block.match(/^data:\s*(.+)$/m)?.[1];
+          if (!event || !dataText) continue;
+          const data = JSON.parse(dataText);
+
+          if (event === 'delta' && typeof data.text === 'string') {
+            appendAssistantDelta(data.text);
+            queueSpeechDelta(data.text);
+          }
+          if (event === 'done') {
+            finalData = data.data;
+          }
+          if (event === 'error') {
+            throw new Error(data.message || '流式回复失败');
+          }
+        }
+      }
+
+      if (!callActiveRef.current || abortController.signal.aborted) return;
+      finishAssistantStreaming();
+      queueSpeechDelta('', true);
+
+      if (finalData?.memoryCandidates?.length) {
+        setMemoryCandidates(prev => [...finalData.memoryCandidates, ...prev]);
+      }
+      if (finalData?.usedWebSearch && !finalData.citations?.length) {
         setNotice('本轮识别为联网问题，但搜索服务未配置，因此没有实时来源。');
       }
-      speakText(result.data.message);
     } catch (error) {
-      if ((error as any)?.name === 'AbortError') return;
+      if ((error as any)?.name === 'AbortError') {
+        finishAssistantStreaming();
+        queueSpeechDelta('', true);
+        return;
+      }
+      finishAssistantStreaming();
       setVoiceState('error');
       setNotice(error instanceof Error ? error.message : '发送失败，请稍后再试。');
     }
   };
 
-  const startListening = () => {
+  const startListening = (options: { auto?: boolean } = {}) => {
+    autoConversationRef.current = true;
     if (realtimeSessionIdRef.current && !realtimeFallbackModeRef.current) {
       startRealtimeCapture().catch(error => {
         setVoiceState('error');
@@ -630,6 +840,8 @@ export default function VoiceAssistantPage() {
       return;
     }
     if (isRecording) {
+      autoConversationRef.current = false;
+      stopMicMeter();
       recognitionRef.current.stop();
       setIsRecording(false);
       setVoiceState('idle');
@@ -638,6 +850,7 @@ export default function VoiceAssistantPage() {
     if (isSpeakingRef.current) interruptSpeech('user_speech');
 
     sentFinalRef.current = false;
+    suppressRecognitionEndRef.current = false;
     recognitionRef.current.onresult = (event: any) => {
       let finalText = '';
       let interimText = '';
@@ -649,7 +862,9 @@ export default function VoiceAssistantPage() {
       setInput(finalText || interimText);
       if (finalText.trim() && !sentFinalRef.current) {
         sentFinalRef.current = true;
+        suppressRecognitionEndRef.current = true;
         recognitionRef.current.stop();
+        stopMicMeter();
         sendMessage(finalText);
       }
     };
@@ -663,14 +878,24 @@ export default function VoiceAssistantPage() {
       setVoiceState('error');
       setNotice(errorMap[event.error] || '我没听清，可以再试一次。');
       setIsRecording(false);
+      stopMicMeter();
     };
     recognitionRef.current.onend = () => {
       setIsRecording(false);
-      if (voiceStateRef.current === 'listening') setVoiceState('idle');
+      stopMicMeter();
+      if (voiceStateRef.current === 'listening' && !suppressRecognitionEndRef.current) {
+        setVoiceState(options.auto ? 'listening' : 'idle');
+      }
+      suppressRecognitionEndRef.current = false;
     };
-    recognitionRef.current.start();
-    setIsRecording(true);
-    setVoiceState('listening');
+    startMicMeter().catch(() => {});
+    try {
+      recognitionRef.current.start();
+      setIsRecording(true);
+      setVoiceState('listening');
+    } catch {
+      setNotice('语音识别正在启动，请稍等一秒再试。');
+    }
   };
 
   const endCall = async () => {
@@ -680,6 +905,8 @@ export default function VoiceAssistantPage() {
     stopSpeakingNow();
     stopBargeInMonitor();
     await stopRealtimeCapture(false);
+    stopRealtimeOutputPolling();
+    stopMicMeter();
     clearRealtimePlayback();
     const activeRealtimeSessionId = realtimeSessionIdRef.current;
     if (activeRealtimeSessionId) {
@@ -725,11 +952,11 @@ export default function VoiceAssistantPage() {
 
   return (
     <main className={styles.page}>
-      <section className={styles.shell}>
-        <header className={styles.header}>
-          <div>
-            <p className={styles.kicker}>Standalone Voice Test</p>
-            <h1>AI 语音助手</h1>
+      <section className={styles.callWindow}>
+        <header className={styles.windowBar}>
+          <div className={styles.windowDots} aria-hidden="true">
+            <span />
+            <span />
           </div>
           <div className={styles.status} role="status" aria-live="polite">
             <span className={`${styles.statusDot} ${styles[`state_${voiceState}`] || ''}`} />
@@ -739,47 +966,102 @@ export default function VoiceAssistantPage() {
 
         {notice && <div className={styles.notice} role="alert">{notice}</div>}
 
-        <section className={styles.captionPanel} aria-label="对话字幕">
-          <p className={styles.assistantText}>{lastAssistant?.content || '正在准备语音助手。'}</p>
-          {lastUser && <p className={styles.userText}>我听到的是：{lastUser.content}</p>}
-        </section>
-
-        <section className={styles.controls} aria-label="语音控制">
-          <button className={styles.primaryButton} onClick={startListening} disabled={voiceState === 'thinking' || voiceState === 'booting'}>
-            <Mic size={34} />
-            {isRecording ? '停止听' : voiceState === 'speaking' ? '打断并说话' : '开始说话'}
-          </button>
-          <button className={styles.secondaryButton} onClick={() => interruptSpeech('manual_stop')} disabled={voiceState !== 'speaking'}>
-            <Square size={24} />
-            打断
-          </button>
-          <button className={styles.secondaryButton} onClick={endCall}>
-            <PhoneOff size={24} />
-            重开一轮
-          </button>
-        </section>
-
-        <section className={styles.textFallback} aria-label="文字输入">
-          <textarea
-            value={input}
-            onChange={event => setInput(event.target.value)}
-            placeholder="麦克风不好用？在这里打字测试"
-            rows={2}
-          />
-          <button onClick={() => sendMessage()} disabled={!input.trim() || voiceState === 'thinking'}>
-            <Send size={22} />
-            发送
-          </button>
-        </section>
-
-        <section className={styles.transcript} aria-label="最近对话记录">
-          {messages.slice(-6).map((message, index) => (
-            <div key={`${message.timestamp}-${index}`} className={message.role === 'assistant' ? styles.assistantBubble : styles.userBubble}>
-              {message.role === 'assistant' && <Volume2 size={18} />}
-              <span>{message.content}</span>
+        <section className={styles.stage} aria-label="AI 语音助手通话区">
+          <div className={`${styles.avatar} ${isSpeaking ? styles.avatarSpeaking : ''} ${isRecording ? styles.avatarListening : ''}`} aria-hidden="true">
+            <div className={styles.avatarHalo} />
+            <div className={styles.avatarFace}>
+              <span className={styles.hair} />
+              <span className={styles.eyeLeft} />
+              <span className={styles.eyeRight} />
+              <span className={styles.mouth} />
             </div>
-          ))}
+          </div>
+
+          <div className={styles.soundWave} aria-hidden="true">
+            {[0, 1, 2, 3, 4].map(index => (
+              <span
+                key={index}
+                style={{ transform: `scaleY(${Math.max(0.18, isRecording ? voiceLevel + index * 0.08 : isSpeaking ? 0.45 + index * 0.08 : 0.22)})` }}
+              />
+            ))}
+          </div>
+
+          <p className={styles.promptText}>
+            {voiceState === 'listening'
+              ? '请开始说话'
+              : voiceState === 'speaking'
+                ? '我正在回答，可以点麦克风打断'
+                : voiceState === 'thinking'
+                  ? '正在生成回复'
+                  : '点击麦克风开始'}
+          </p>
         </section>
+
+        <section className={styles.callControls} aria-label="语音控制">
+          <button className={styles.iconButton} type="button" title="界面预览">
+            <Monitor size={28} />
+          </button>
+          <button
+            className={`${styles.iconButton} ${showCaptions ? styles.iconButtonActive : ''}`}
+            type="button"
+            title={showCaptions ? '隐藏字幕' : '显示字幕'}
+            onClick={() => setShowCaptions(value => !value)}
+          >
+            <MessageCircle size={28} />
+          </button>
+          <button
+            className={`${styles.micButton} ${isRecording ? styles.micButtonActive : ''}`}
+            onClick={() => startListening()}
+            disabled={voiceState === 'thinking' || voiceState === 'booting'}
+            title={isRecording ? '停止听' : voiceState === 'speaking' ? '打断并说话' : '开始说话'}
+          >
+            <Mic size={34} />
+          </button>
+          <button
+            className={`${styles.iconButton} ${autoBargeInEnabled ? styles.iconButtonActive : ''}`}
+            type="button"
+            title={autoBargeInEnabled ? '关闭试验性智能打断' : '开启试验性智能打断'}
+            onClick={() => setAutoBargeInEnabled(value => !value)}
+          >
+            <Square size={28} />
+          </button>
+          <button className={styles.hangupButton} onClick={endCall} title="挂断并重开">
+            <PhoneOff size={30} />
+          </button>
+        </section>
+
+        {showCaptions && (
+          <section className={styles.captionPanel} aria-label="对话字幕">
+            <p className={styles.assistantText}>{lastAssistant?.content || '正在准备语音助手。'}</p>
+            {lastUser && <p className={styles.userText}>我听到的是：{lastUser.content}</p>}
+          </section>
+        )}
+
+        {showCaptions && (
+          <section className={styles.textFallback} aria-label="文字输入">
+            <textarea
+              value={input}
+              onChange={event => setInput(event.target.value)}
+              placeholder="麦克风不好用？在这里打字测试"
+              rows={2}
+            />
+            <button onClick={() => sendMessage()} disabled={!input.trim() || voiceState === 'thinking'}>
+              <Send size={22} />
+              发送
+            </button>
+          </section>
+        )}
+
+        {showCaptions && (
+          <section className={styles.transcript} aria-label="最近对话记录">
+            {messages.slice(-6).map((message, index) => (
+              <div key={`${message.timestamp}-${index}`} className={message.role === 'assistant' ? styles.assistantBubble : styles.userBubble}>
+                {message.role === 'assistant' && <Volume2 size={18} />}
+                <span>{message.content || (message.streaming ? '...' : '')}</span>
+              </div>
+            ))}
+          </section>
+        )}
 
         {memoryCandidates.length > 0 && (
           <aside className={styles.memoryPanel}>

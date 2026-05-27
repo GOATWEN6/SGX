@@ -1,7 +1,7 @@
 {
   "updatedAt": "2026-05-27",
-  "stage": "Sprint 1B",
-  "focus": "Doubao realtime binary protocol codec and provider integration",
+  "stage": "Sprint 1C",
+  "focus": "Streaming text response, queued browser TTS fallback, safer interruption UX, and call-style UI",
   "overallStatus": "in_progress",
   "currentBranch": "codex-voice-chat-standalone",
   "truthSource": [
@@ -48,7 +48,9 @@
         "server-side realtime proxy spike",
         "browser audio chunk capture",
         "audio delta playback queue",
-        "provider interrupt propagation"
+        "provider interrupt propagation",
+        "streaming conversation SSE endpoint",
+        "browser TTS fallback queue"
       ]
     },
     {
@@ -64,17 +66,20 @@
     }
   ],
   "knownGaps": [
+    "Text replies now stream through /api/conversation/message/stream and the fallback TTS uses a sentence queue, but this is still browser TTS when Doubao realtime is unavailable.",
     "Doubao binary protocol is implemented behind DOUBAO_REALTIME_FORWARD_BINARY_PROTOCOL, but live provider smoke is still required.",
     "Browser MediaRecorder currently sends WebM/Opus chunks; official provider may require raw Opus or PCM AudioWorklet conversion.",
     "Provider audio/text delta polling exists, but true end-to-end playback quality, caption timing, and latency are not yet manually verified.",
+    "Automatic barge-in is deliberately behind a visible experimental toggle because the local RMS VAD can still false-trigger in noise; production should use Silero/WebRTC VAD or LiveKit/Pipecat turn-taking.",
     "Text model activation must be smoke tested before judging assistant quality.",
     "Web search has framework shape but lacks production search provider evidence.",
     "Sensitive memory confirmation needs stronger regression coverage."
   ],
   "nextActions": [
-    "Run npm run test:voice:realtime after binary protocol integration.",
+    "Run npm run test:voice:realtime after streaming UI and binary protocol integration.",
     "Run npm run test:voice:secret to ensure provider credentials are not committed or returned.",
     "Run JWT_SECRET=dev-build-secret npm run build.",
+    "Run browser manual acceptance for streaming subtitles, queued TTS, mic meter, and explicit interrupt button.",
     "With user-approved env, run a live Doubao provider smoke using DOUBAO_REALTIME_FORWARD_BINARY_PROTOCOL=true.",
     "If provider rejects WebM/Opus chunks, replace MediaRecorder upload with AudioWorklet PCM16 capture."
   ],
@@ -89,7 +94,11 @@
     "src/lib/voice/realtime/doubao-provider.ts",
     "src/lib/voice/realtime/header-websocket.ts",
     "src/app/api/voice/realtime/route.ts",
+    "src/app/api/conversation/message/stream/route.ts",
+    "src/lib/llm/client.ts#streamLLM",
+    "src/lib/llm/providers/openai-compatible.ts#stream",
     "src/app/voice-assistant/page.tsx#MediaRecorder",
+    "src/app/voice-assistant/page.tsx#speechQueueRef",
     "docs/config/voice-assistant-env.md",
     "scripts/voice-realtime-smoke.mjs",
     "package.json#test:voice:realtime"

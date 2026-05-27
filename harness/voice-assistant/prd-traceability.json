@@ -40,10 +40,12 @@
       "id": "D1.3",
       "title": "AI 回复生成与联网查询",
       "userVisibleBehavior": "AI 能生成短句、温和回复；天气、新闻、节日等需要最新信息时走工具并带来源。",
-      "currentStatus": "partial_text",
+      "currentStatus": "partial_streaming_text",
       "currentEvidence": [
         "src/lib/conversation/index.ts",
-        "src/lib/tools/index.ts"
+        "src/lib/tools/index.ts",
+        "src/app/api/conversation/message/stream/route.ts",
+        "src/lib/llm/client.ts"
       ],
       "nextEvidenceRequired": [
         "Ark 文本模型真实可用 smoke",
@@ -55,10 +57,11 @@
       "id": "D1.4",
       "title": "TTS 播报、大字幕与状态反馈",
       "userVisibleBehavior": "AI 回复用语音读出，同时页面显示大字幕和清晰状态。",
-      "currentStatus": "demo_fallback_only",
+      "currentStatus": "partial_streaming_caption_tts_queue",
       "currentEvidence": [
-        "browser speechSynthesis fallback",
-        "src/app/voice-assistant/page.tsx"
+        "browser speechSynthesis fallback queue",
+        "src/app/voice-assistant/page.tsx",
+        "src/app/voice-assistant/voice-assistant.module.css"
       ],
       "nextEvidenceRequired": [
         "provider audio delta 播放队列记录",
@@ -71,9 +74,11 @@
       "id": "D1.5",
       "title": "打断与连续对话",
       "userVisibleBehavior": "AI 正在说时，老人开口或点击打断，旧声音停止，新输入进入下一轮。",
-      "currentStatus": "local_demo_only",
+      "currentStatus": "local_button_interrupt_and_experimental_vad",
       "currentEvidence": [
-        "local VAD stops browser TTS"
+        "local explicit interrupt stops browser TTS and aborts in-flight stream",
+        "experimental local RMS VAD is behind a visible toggle",
+        "server realtime interrupt route and stale-response guard"
       ],
       "nextEvidenceRequired": [
         "client runtime interrupt event",
