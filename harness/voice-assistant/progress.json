@@ -1,7 +1,7 @@
 {
   "updatedAt": "2026-05-27",
-  "stage": "Sprint 1C",
-  "focus": "Streaming text response, queued browser TTS fallback, safer interruption UX, and call-style UI",
+  "stage": "Sprint 1D",
+  "focus": "Typewriter streaming display, fast first response, default voice-triggered barge-in, anime call avatar, and browser-tested boot recovery",
   "overallStatus": "in_progress",
   "currentBranch": "codex-voice-chat-standalone",
   "truthSource": [
@@ -50,7 +50,11 @@
         "audio delta playback queue",
         "provider interrupt propagation",
         "streaming conversation SSE endpoint",
-        "browser TTS fallback queue"
+        "browser TTS fallback queue",
+        "fast acknowledgement before slow first model token",
+        "typewriter subtitle queue",
+        "adaptive browser VAD auto barge-in",
+        "anime avatar speech/listening animation"
       ]
     },
     {
@@ -66,11 +70,11 @@
     }
   ],
   "knownGaps": [
-    "Text replies now stream through /api/conversation/message/stream and the fallback TTS uses a sentence queue, but this is still browser TTS when Doubao realtime is unavailable.",
+    "Text replies stream through /api/conversation/message/stream, emit a fast acknowledgement if the first model token is slow, and then pass through a local typewriter queue so the UI visibly reveals characters even when one large delta arrives.",
     "Doubao binary protocol is implemented behind DOUBAO_REALTIME_FORWARD_BINARY_PROTOCOL, but live provider smoke is still required.",
     "Browser MediaRecorder currently sends WebM/Opus chunks; official provider may require raw Opus or PCM AudioWorklet conversion.",
     "Provider audio/text delta polling exists, but true end-to-end playback quality, caption timing, and latency are not yet manually verified.",
-    "Automatic barge-in is deliberately behind a visible experimental toggle because the local RMS VAD can still false-trigger in noise; production should use Silero/WebRTC VAD or LiveKit/Pipecat turn-taking.",
+    "Automatic barge-in is default-on with local RMS VAD, adaptive noise-floor calibration, consecutive-hit detection, and cooldown, but production should still use Silero/WebRTC VAD or LiveKit/Pipecat turn-taking.",
     "Text model activation must be smoke tested before judging assistant quality.",
     "Web search has framework shape but lacks production search provider evidence.",
     "Sensitive memory confirmation needs stronger regression coverage."
@@ -79,7 +83,7 @@
     "Run npm run test:voice:realtime after streaming UI and binary protocol integration.",
     "Run npm run test:voice:secret to ensure provider credentials are not committed or returned.",
     "Run JWT_SECRET=dev-build-secret npm run build.",
-    "Run browser manual acceptance for streaming subtitles, queued TTS, mic meter, and explicit interrupt button.",
+    "Run browser manual acceptance for streaming subtitles, queued TTS, mic meter, default voice-triggered interruption, and the anime call avatar.",
     "With user-approved env, run a live Doubao provider smoke using DOUBAO_REALTIME_FORWARD_BINARY_PROTOCOL=true.",
     "If provider rejects WebM/Opus chunks, replace MediaRecorder upload with AudioWorklet PCM16 capture."
   ],
@@ -99,6 +103,9 @@
     "src/lib/llm/providers/openai-compatible.ts#stream",
     "src/app/voice-assistant/page.tsx#MediaRecorder",
     "src/app/voice-assistant/page.tsx#speechQueueRef",
+    "src/app/voice-assistant/page.tsx#enqueueAssistantDisplayDelta",
+    "src/app/voice-assistant/page.tsx#vadNoiseFloorRef",
+    "src/app/voice-assistant/voice-assistant.module.css#animeAvatar",
     "docs/config/voice-assistant-env.md",
     "scripts/voice-realtime-smoke.mjs",
     "package.json#test:voice:realtime"

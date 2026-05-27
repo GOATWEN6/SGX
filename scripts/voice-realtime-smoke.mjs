@@ -116,6 +116,10 @@ async function runStaticContractChecks() {
   expect(realtimeRouteSource.includes('textDeltas: flushDoubaoRealtimeTextOutput'), 'realtime route returns minimal provider text deltas');
   expect(conversationStreamRouteSource.includes('text/event-stream'), 'conversation stream route returns SSE');
   expect(conversationStreamRouteSource.includes("write('delta'"), 'conversation stream route emits text deltas');
+  expect(conversationStreamRouteSource.includes('immediateAck') && conversationStreamRouteSource.includes("write('delta', { text: immediateAck })"), 'conversation stream route sends immediate acknowledgement before slow preparation work');
+  expect(conversationStreamRouteSource.includes('streamWithFastAck'), 'conversation stream route emits a fast acknowledgement when first model token is slow');
+  expect(conversationStreamRouteSource.includes('VOICE_ASSISTANT_FAST_ACK_MS'), 'conversation stream route exposes fast acknowledgement timeout config');
+  expect(conversationStreamRouteSource.includes('maxTokens: 320'), 'conversation stream route keeps voice replies bounded for latency');
   expect(llmClientSource.includes('streamLLM'), 'LLM client exposes streaming helper');
   expect(llmProviderSource.includes('stream: true'), 'OpenAI-compatible provider requests streaming completions');
   expect(voiceAssistantPageSource.includes('MediaRecorder'), 'voice assistant page captures browser audio chunks');
@@ -123,9 +127,19 @@ async function runStaticContractChecks() {
   expect(voiceAssistantPageSource.includes("action: 'poll_output'"), 'voice assistant page polls provider audio deltas');
   expect(voiceAssistantPageSource.includes('applyRealtimeTextDeltas'), 'voice assistant page updates captions from provider text deltas');
   expect(voiceAssistantPageSource.includes('/api/conversation/message/stream'), 'voice assistant page uses streaming message endpoint');
+  expect(voiceAssistantPageSource.includes("voiceStateRef.current === 'thinking'") && voiceAssistantPageSource.includes("setVoiceState('speaking')"), 'voice assistant page switches to speaking as soon as first delta arrives');
+  expect(voiceAssistantPageSource.includes('enqueueAssistantDisplayDelta'), 'voice assistant page reveals assistant text through a typewriter queue');
+  expect(voiceAssistantPageSource.includes('waitForAssistantDisplayQueue'), 'voice assistant page waits for visual streaming before closing assistant message');
   expect(voiceAssistantPageSource.includes('speechQueueRef'), 'voice assistant page uses queued TTS playback');
   expect(voiceAssistantPageSource.includes('currentUtteranceRef'), 'voice assistant page retains current utterance to prevent early TTS stop');
   expect(voiceAssistantPageSource.includes('autoBargeInEnabled'), 'voice assistant page gates experimental auto barge-in');
+  expect(voiceAssistantPageSource.includes('useState(true);') && voiceAssistantPageSource.includes('setAutoBargeInEnabled'), 'voice assistant page enables auto barge-in by default');
+  expect(voiceAssistantPageSource.includes('vadNoiseFloorRef'), 'voice assistant page uses adaptive noise-floor VAD threshold');
+  expect(voiceAssistantPageSource.includes('lastAutoInterruptAtRef'), 'voice assistant page debounces automatic barge-in interrupts');
+  expect(voiceAssistantPageSource.includes('setAutoBargeInEnabled(false)'), 'voice assistant page disables auto barge-in when mic permission is unavailable');
+  expect(voiceAssistantPageSource.includes('if (options.auto)') && voiceAssistantPageSource.includes("setVoiceState('idle')"), 'voice assistant page does not leave auto-listen permission failures in error state');
+  expect(voiceAssistantPageSource.includes('data-testid="anime-avatar"'), 'voice assistant page renders the custom anime avatar');
+  expect(voiceAssistantPageSource.includes('您直接说话即可打断'), 'voice assistant page explains voice-triggered interruption');
   expect(voiceAssistantPageSource.includes('clearRealtimePlayback'), 'voice assistant clears realtime playback on interrupt/end');
   expect(secretScanSource.includes('provider-secret-assignment'), 'secret scan covers provider ACCESS_KEY and APP_KEY assignments');
 }

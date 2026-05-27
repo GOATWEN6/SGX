@@ -28,6 +28,12 @@
 | `DOUBAO_REALTIME_SESSION_PARAMS_JSON` | 否 | 不建议默认填 | 上游 StartSession payload 的覆盖参数。用于官方协议字段和当前默认 payload 不一致时快速联调，不提交真实值。 |
 | `DOUBAO_REALTIME_CONNECT_TIMEOUT_MS` | 否 | `3500` | 服务端连接上游 WebSocket 的超时时间。 |
 
+## Voice Assistant UX
+
+| 变量 | 必填 | 示例/默认 | 含义 |
+|---|---:|---|---|
+| `VOICE_ASSISTANT_FAST_ACK_MS` | 否 | `900` | 文字/语音 fallback 链路等待模型首 token 的最长时间。超过后先向老人端发送一句短确认，避免页面长时间停在“正在想一想”。范围会被限制在 200-2500ms。 |
+
 兼容别名：
 
 - `VOLC_REALTIME_BASE_URL` -> `DOUBAO_REALTIME_ENDPOINT`
@@ -56,13 +62,16 @@
 - 服务端已新增 Doubao 二进制协议 codec/translator，并在保护开关打开时发送 `StartConnection`、`StartSession`、`TaskRequest`、`ClientInterrupt`。
 - 页面已新增 provider 音频/文本增量轮询，把服务端收到的 audio delta 放入播放队列，并把 transcript delta 用于大字幕。
 - 打断会清理本地播放队列并进入服务端 realtime interrupt。
-- 文本回复已新增 `/api/conversation/message/stream` SSE 接口；OpenAI-compatible/Volcengine Ark 文本模型走 `stream: true` 时，前端大字幕会随 token 增量更新。
+- 文本回复已新增 `/api/conversation/message/stream` SSE 接口；OpenAI-compatible/Volcengine Ark 文本模型走 `stream: true` 时，前端会再经过本地逐字队列显示，避免后端一次性 delta 时看起来“整段跳出”。
+- 流式接口增加了快速首响：SSE 打开后会先发一句低风险确认话术，让页面和 TTS 立即进入“AI 正在说话”；如果模型首 token 后续仍很慢，会继续等待模型流式补全。
 - Demo fallback 的浏览器 `speechSynthesis` 已改为分句队列，保留当前 `SpeechSynthesisUtterance` 引用，减少“只播前几个字就停”的问题。
-- 页面新增电话式 UI：动态 AI 形象、麦克风音量波动、声纹条、挂断按钮、字幕开关和试验性自动打断开关。
+- 页面新增电话式 UI：自绘动漫 AI 形象、说话口型、聆听光环、麦克风音量波动、声纹条、挂断按钮、字幕开关和默认开启的自动打断开关。
+- 页面启动时会自动处理本地过期 token：如果 session 创建返回未登录，会重新创建测试用户并重试，避免页面一直停在“未登录或 token 已过期”。
+- 如果浏览器没有开放麦克风权限，自动打断会降级关闭并保留文字测试，不再把页面留在“需要重试”。
 
 当前仍未宣称完成：
 
 - 官方真实 provider smoke。也就是在你的火山环境里确认 StartSession payload、音频容器、返回音频格式完全匹配。
 - provider audio delta 的真实播放质量和延迟。
 - 真实 10 轮电话式对话验收。
-- 自动智能打断的生产级方案。当前本地 RMS VAD 默认关闭，只能作为试验开关；下一步应复现 Silero/WebRTC VAD、LiveKit Agents 或 Pipecat 的 turn-taking/interruption 方案。
+- 自动智能打断的生产级方案。当前本地 RMS VAD 已默认开启并加入环境噪声校准、连续命中和冷却防抖，但仍只是浏览器端轻量方案；下一步应复现 Silero/WebRTC VAD、LiveKit Agents 或 Pipecat 的 turn-taking/interruption 方案。

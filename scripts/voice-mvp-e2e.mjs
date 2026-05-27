@@ -254,21 +254,38 @@ async function staticFrontendChecks() {
 
   const standalonePageSource = await readFile(new URL('../src/app/voice-assistant/page.tsx', import.meta.url), 'utf8');
   const standaloneStyleSource = await readFile(new URL('../src/app/voice-assistant/voice-assistant.module.css', import.meta.url), 'utf8');
+  const standaloneStreamRouteSource = await readFile(new URL('../src/app/api/conversation/message/stream/route.ts', import.meta.url), 'utf8');
   expect(standalonePageSource.includes('AI 语音助手'), '存在独立 AI 语音助手页面');
   expect(standalonePageSource.includes("body: JSON.stringify({ mode: 'web_voice_call', conversationType: 'ai_chat' })"), '独立页面启动 web_voice_call 对话');
   expect(standalonePageSource.includes('startBargeInMonitor'), '独立页面包含自动打断 VAD 逻辑');
   expect(standalonePageSource.includes('/api/conversation/message/stream'), '独立页面使用流式文字回复接口');
+  expect(standalonePageSource.includes("voiceStateRef.current === 'thinking'") && standalonePageSource.includes("setVoiceState('speaking')"), '独立页面收到首个 delta 后立即进入 AI 说话状态');
+  expect(standalonePageSource.includes('enqueueAssistantDisplayDelta'), '独立页面把模型增量放入逐字字幕队列');
+  expect(standalonePageSource.includes('waitForAssistantDisplayQueue'), '独立页面在关闭流式消息前等待逐字字幕完成');
   expect(standalonePageSource.includes('speechQueueRef'), '独立页面使用 TTS 分句队列');
   expect(standalonePageSource.includes('currentUtteranceRef'), '独立页面保留 SpeechSynthesisUtterance 引用');
   expect(standalonePageSource.includes('startMicMeter'), '独立页面包含麦克风音量波动检测');
-  expect(standalonePageSource.includes('autoBargeInEnabled'), '独立页面把试验性自动打断做成显式开关');
+  expect(standalonePageSource.includes('autoBargeInEnabled'), '独立页面把自动打断做成显式开关');
+  expect(standalonePageSource.includes('useState(true);') && standalonePageSource.includes('setAutoBargeInEnabled'), '独立页面默认开启自动语音打断');
+  expect(standalonePageSource.includes('vadNoiseFloorRef'), '独立页面使用自适应环境噪声阈值减少误打断');
+  expect(standalonePageSource.includes('lastAutoInterruptAtRef'), '独立页面对自动打断做冷却防抖');
+  expect(standalonePageSource.includes('setAutoBargeInEnabled(false)'), '独立页面在自动打断无麦克风权限时会降级关闭');
+  expect(standalonePageSource.includes('if (options.auto)') && standalonePageSource.includes("setVoiceState('idle')"), '独立页面自动续听失败不把页面留在错误态');
   expect(standalonePageSource.includes("action: 'append_audio'"), '独立页面会上传 realtime 音频 chunk');
   expect(standalonePageSource.includes("action: 'poll_output'"), '独立页面会轮询 provider audio delta');
   expect(standalonePageSource.includes('/api/memory/candidates/${candidateId}/${action}'), '独立页面支持候选记忆确认/拒绝');
+  expect(standalonePageSource.includes('data-testid="anime-avatar"'), '独立页面渲染自绘动漫 AI 角色');
+  expect(standalonePageSource.includes('您直接说话即可打断'), '独立页面把打断方式说明为直接说话');
   expect(standaloneStyleSource.includes('.captionPanel'), '独立页面包含大字幕样式');
   expect(standaloneStyleSource.includes('.micButton'), '独立页面包含主语音按钮样式');
   expect(standaloneStyleSource.includes('.soundWave'), '独立页面包含动态声纹样式');
-  expect(standaloneStyleSource.includes('.avatar'), '独立页面包含动态 AI 形象样式');
+  expect(standaloneStyleSource.includes('.animeAvatar'), '独立页面包含动漫 AI 形象样式');
+  expect(standaloneStyleSource.includes('@keyframes mouthOpenFrame'), '动漫角色包含说话口型动画');
+  expect(standaloneStyleSource.includes('.avatarListeningRing'), '动漫角色包含聆听状态动画');
+  expect(standaloneStreamRouteSource.includes('streamWithFastAck'), '流式接口在模型首 token 慢时发送快速确认');
+  expect(standaloneStreamRouteSource.includes('immediateAck') && standaloneStreamRouteSource.includes("write('delta', { text: immediateAck })"), '流式接口在准备上下文前先发送即时确认');
+  expect(standaloneStreamRouteSource.includes('VOICE_ASSISTANT_FAST_ACK_MS'), '快速确认超时时间可通过环境变量调整');
+  expect(standaloneStreamRouteSource.includes('maxTokens: 320'), '语音助手流式回复限制 token 数以降低延迟');
 }
 
 function printReport() {

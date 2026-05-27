@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { MessageCircle, Mic, Monitor, PhoneOff, Send, Square, Volume2 } from 'lucide-react';
-import { authenticatedFetch, getToken, setAuth } from '@/lib/client-auth';
+import { Activity, MessageCircle, Mic, Monitor, PhoneOff, Send, Volume2 } from 'lucide-react';
+import { authenticatedFetch, clearAuth, getToken, setAuth } from '@/lib/client-auth';
 import styles from './voice-assistant.module.css';
 
 type VoiceState = 'booting' | 'idle' | 'connecting' | 'listening' | 'thinking' | 'speaking' | 'interrupted' | 'error';
@@ -52,8 +52,8 @@ const stateLabel: Record<VoiceState, string> = {
   error: '需要重试',
 };
 
-async function ensureTestUser(): Promise<string> {
-  if (getToken()) return 'existing';
+async function createTestUser(): Promise<string> {
+  clearAuth();
 
   const response = await fetch('/api/user', {
     method: 'POST',
@@ -76,6 +76,11 @@ async function ensureTestUser(): Promise<string> {
   }
   setAuth(result.data.token, result.data.user.id);
   return result.data.user.id;
+}
+
+async function ensureTestUser(forceFresh = false): Promise<string> {
+  if (!forceFresh && getToken()) return 'existing';
+  return createTestUser();
 }
 
 async function blobToBase64(blob: Blob): Promise<string> {
@@ -129,7 +134,7 @@ export default function VoiceAssistantPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [showCaptions, setShowCaptions] = useState(true);
-  const [autoBargeInEnabled, setAutoBargeInEnabled] = useState(false);
+  const [autoBargeInEnabled, setAutoBargeInEnabled] = useState(true);
   const [voiceLevel, setVoiceLevel] = useState(0);
   const [memoryCandidates, setMemoryCandidates] = useState<MemoryCandidateLite[]>([]);
 
@@ -137,6 +142,9 @@ export default function VoiceAssistantPage() {
   const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const speechQueueRef = useRef<string[]>([]);
   const speechBufferRef = useRef('');
+  const displayQueueRef = useRef('');
+  const displayTimerRef = useRef<number | null>(null);
+  const displayWaitersRef = useRef<Array<() => void>>([]);
   const isSpeechQueueActiveRef = useRef(false);
   const assistantSpeechStartedAtRef = useRef(0);
   const autoConversationRef = useRef(false);
@@ -159,6 +167,9 @@ export default function VoiceAssistantPage() {
   const vadAnalyserRef = useRef<AnalyserNode | null>(null);
   const vadIntervalRef = useRef<number | null>(null);
   const vadHitCountRef = useRef(0);
+  const vadNoiseFloorRef = useRef(0.025);
+  const vadStartedAtRef = useRef(0);
+  const lastAutoInterruptAtRef = useRef(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const realtimeStreamRef = useRef<MediaStream | null>(null);
   const realtimeChunkSequenceRef = useRef(0);
@@ -245,6 +256,8 @@ export default function VoiceAssistantPage() {
     vadContextRef.current?.close().catch(() => {});
     vadContextRef.current = null;
     vadAnalyserRef.current = null;
+    vadNoiseFloorRef.current = 0.025;
+    vadStartedAtRef.current = 0;
   };
 
   const stopSpeakingNow = () => {
@@ -257,6 +270,21 @@ export default function VoiceAssistantPage() {
     isSpeechQueueActiveRef.current = false;
     clearRealtimePlayback();
     setIsSpeaking(false);
+  };
+
+  const resolveDisplayWaiters = () => {
+    const waiters = displayWaitersRef.current;
+    displayWaitersRef.current = [];
+    waiters.forEach(resolve => resolve());
+  };
+
+  const clearAssistantDisplayQueue = () => {
+    if (displayTimerRef.current !== null) {
+      window.clearTimeout(displayTimerRef.current);
+      displayTimerRef.current = null;
+    }
+    displayQueueRef.current = '';
+    resolveDisplayWaiters();
   };
 
   const interruptSpeech = async (reason: 'user_speech' | 'manual_stop' = 'manual_stop') => {
@@ -316,6 +344,8 @@ export default function VoiceAssistantPage() {
     currentAudioRef.current = audio;
     currentAudioUrlRef.current = objectUrl;
     isRealtimeAudioPlayingRef.current = true;
+    assistantSpeechStartedAtRef.current = Date.now();
+    void startBargeInMonitor();
     setIsSpeaking(true);
     setVoiceState('speaking');
 
@@ -523,6 +553,8 @@ export default function VoiceAssistantPage() {
       vadStreamRef.current = stream;
       vadContextRef.current = context;
       vadAnalyserRef.current = analyser;
+      vadNoiseFloorRef.current = 0.025;
+      vadStartedAtRef.current = Date.now();
 
       const samples = new Uint8Array(analyser.fftSize);
       vadIntervalRef.current = window.setInterval(() => {
@@ -530,8 +562,18 @@ export default function VoiceAssistantPage() {
           vadHitCountRef.current = 0;
           return;
         }
-        if (Date.now() - assistantSpeechStartedAtRef.current < 1200) {
+        const elapsedFromAssistant = Date.now() - assistantSpeechStartedAtRef.current;
+        const elapsedFromVad = Date.now() - vadStartedAtRef.current;
+        if (elapsedFromAssistant < 900 || elapsedFromVad < 700) {
           vadHitCountRef.current = 0;
+          analyser.getByteTimeDomainData(samples);
+          let calibrationSum = 0;
+          for (let i = 0; i < samples.length; i += 1) {
+            const centered = (samples[i] - 128) / 128;
+            calibrationSum += centered * centered;
+          }
+          const calibrationRms = Math.sqrt(calibrationSum / samples.length);
+          vadNoiseFloorRef.current = Math.max(0.018, vadNoiseFloorRef.current * 0.88 + calibrationRms * 0.12);
           return;
         }
         analyser.getByteTimeDomainData(samples);
@@ -541,14 +583,30 @@ export default function VoiceAssistantPage() {
           sumSquares += centered * centered;
         }
         const rms = Math.sqrt(sumSquares / samples.length);
-        vadHitCountRef.current = rms > 0.12 ? vadHitCountRef.current + 1 : Math.max(0, vadHitCountRef.current - 1);
-        if (vadHitCountRef.current >= 7) {
+        const dynamicThreshold = Math.max(0.055, vadNoiseFloorRef.current * 2.8 + 0.025);
+        if (rms > dynamicThreshold) {
+          vadHitCountRef.current += 1;
+        } else {
+          vadHitCountRef.current = Math.max(0, vadHitCountRef.current - 1);
+          vadNoiseFloorRef.current = Math.max(0.018, vadNoiseFloorRef.current * 0.94 + rms * 0.06);
+        }
+        if (vadHitCountRef.current >= 4 && Date.now() - lastAutoInterruptAtRef.current > 1600) {
+          lastAutoInterruptAtRef.current = Date.now();
           vadHitCountRef.current = 0;
-          interruptSpeech('user_speech');
+          stopBargeInMonitor();
+          void interruptSpeech('user_speech').then(() => {
+            setNotice('检测到您在说话，我已经停下，正在听您说。');
+            window.setTimeout(() => {
+              if (callActiveRef.current && !isRecording && voiceStateRef.current !== 'error') {
+                startListening({ auto: true });
+              }
+            }, 220);
+          });
         }
       }, 120);
     } catch {
-      setNotice('麦克风自动打断监听没有开启，仍可点击“打断”或用文字输入。');
+      setAutoBargeInEnabled(false);
+      setNotice('浏览器没有开放麦克风，自动语音打断暂时关闭；文字输入和手动麦克风仍可继续测试。');
       stopBargeInMonitor();
     }
   };
@@ -632,6 +690,42 @@ export default function VoiceAssistantPage() {
     }
   };
 
+  const revealNextDisplayChar = () => {
+    if (!callActiveRef.current) {
+      clearAssistantDisplayQueue();
+      return;
+    }
+
+    const nextChar = displayQueueRef.current.slice(0, 1);
+    displayQueueRef.current = displayQueueRef.current.slice(1);
+
+    if (nextChar) {
+      appendAssistantDelta(nextChar);
+      const delay = /[，。！？；,.!?;]/.test(nextChar) ? 70 : 22;
+      displayTimerRef.current = window.setTimeout(revealNextDisplayChar, delay);
+      return;
+    }
+
+    displayTimerRef.current = null;
+    resolveDisplayWaiters();
+  };
+
+  const enqueueAssistantDisplayDelta = (text: string) => {
+    if (!text) return;
+    displayQueueRef.current += text;
+    if (displayTimerRef.current === null) {
+      revealNextDisplayChar();
+    }
+  };
+
+  const waitForAssistantDisplayQueue = () => new Promise<void>(resolve => {
+    if (!displayQueueRef.current && displayTimerRef.current === null) {
+      resolve();
+      return;
+    }
+    displayWaitersRef.current.push(resolve);
+  });
+
   const speakText = (text: string) => {
     window.speechSynthesis?.cancel();
     speechQueueRef.current = [];
@@ -640,7 +734,7 @@ export default function VoiceAssistantPage() {
     enqueueSpeechText(text);
   };
 
-  const appendAssistantDelta = (text: string) => {
+  function appendAssistantDelta(text: string) {
     setMessages(prev => {
       const next = [...prev];
       const last = next[next.length - 1];
@@ -651,7 +745,7 @@ export default function VoiceAssistantPage() {
       }
       return next;
     });
-  };
+  }
 
   const finishAssistantStreaming = () => {
     setMessages(prev => prev.map((message, index) => (
@@ -666,12 +760,19 @@ export default function VoiceAssistantPage() {
     setNotice('');
     try {
       await ensureTestUser();
-      const sessionResponse = await authenticatedFetch('/api/conversation/session/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'web_voice_call', conversationType: 'ai_chat' }),
-      });
-      const sessionResult = await sessionResponse.json();
+      const createSession = async () => {
+        const response = await authenticatedFetch('/api/conversation/session/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'web_voice_call', conversationType: 'ai_chat' }),
+        });
+        return response.json();
+      };
+      let sessionResult = await createSession();
+      if (!sessionResult.success && sessionResult.error?.code === 'UNAUTHORIZED') {
+        await ensureTestUser(true);
+        sessionResult = await createSession();
+      }
       if (!sessionResult.success) throw new Error(sessionResult.error?.message || '创建对话失败');
       const nextConversationId = sessionResult.data.session.id;
       setConversationSessionId(nextConversationId);
@@ -733,6 +834,7 @@ export default function VoiceAssistantPage() {
     return () => {
       callActiveRef.current = false;
       messageAbortRef.current?.abort();
+      clearAssistantDisplayQueue();
       recognitionRef.current?.abort?.();
       stopSpeakingNow();
       stopBargeInMonitor();
@@ -750,6 +852,7 @@ export default function VoiceAssistantPage() {
     if (!text || !conversationSessionId) return;
     if (isSpeakingRef.current) await interruptSpeech('user_speech');
 
+    clearAssistantDisplayQueue();
     setInput('');
     setMessages(prev => [
       ...prev,
@@ -792,7 +895,8 @@ export default function VoiceAssistantPage() {
           const data = JSON.parse(dataText);
 
           if (event === 'delta' && typeof data.text === 'string') {
-            appendAssistantDelta(data.text);
+            if (voiceStateRef.current === 'thinking') setVoiceState('speaking');
+            enqueueAssistantDisplayDelta(data.text);
             queueSpeechDelta(data.text);
           }
           if (event === 'done') {
@@ -805,8 +909,10 @@ export default function VoiceAssistantPage() {
       }
 
       if (!callActiveRef.current || abortController.signal.aborted) return;
-      finishAssistantStreaming();
       queueSpeechDelta('', true);
+      await waitForAssistantDisplayQueue();
+      if (!callActiveRef.current || abortController.signal.aborted) return;
+      finishAssistantStreaming();
 
       if (finalData?.memoryCandidates?.length) {
         setMemoryCandidates(prev => [...finalData.memoryCandidates, ...prev]);
@@ -816,6 +922,7 @@ export default function VoiceAssistantPage() {
       }
     } catch (error) {
       if ((error as any)?.name === 'AbortError') {
+        clearAssistantDisplayQueue();
         finishAssistantStreaming();
         queueSpeechDelta('', true);
         return;
@@ -875,10 +982,14 @@ export default function VoiceAssistantPage() {
         'audio-capture': '没有检测到可用麦克风。',
         'no-speech': '我没有听到声音，可以靠近一点再说。',
       };
-      setVoiceState('error');
       setNotice(errorMap[event.error] || '我没听清，可以再试一次。');
       setIsRecording(false);
       stopMicMeter();
+      if (options.auto) {
+        setVoiceState('idle');
+        return;
+      }
+      setVoiceState('error');
     };
     recognitionRef.current.onend = () => {
       setIsRecording(false);
@@ -901,6 +1012,7 @@ export default function VoiceAssistantPage() {
   const endCall = async () => {
     callActiveRef.current = false;
     messageAbortRef.current?.abort();
+    clearAssistantDisplayQueue();
     recognitionRef.current?.abort?.();
     stopSpeakingNow();
     stopBargeInMonitor();
@@ -967,14 +1079,61 @@ export default function VoiceAssistantPage() {
         {notice && <div className={styles.notice} role="alert">{notice}</div>}
 
         <section className={styles.stage} aria-label="AI 语音助手通话区">
-          <div className={`${styles.avatar} ${isSpeaking ? styles.avatarSpeaking : ''} ${isRecording ? styles.avatarListening : ''}`} aria-hidden="true">
-            <div className={styles.avatarHalo} />
-            <div className={styles.avatarFace}>
-              <span className={styles.hair} />
-              <span className={styles.eyeLeft} />
-              <span className={styles.eyeRight} />
-              <span className={styles.mouth} />
-            </div>
+          <div
+            className={`${styles.animeAvatar} ${isSpeaking ? styles.animeAvatarSpeaking : ''} ${isRecording ? styles.animeAvatarListening : ''}`}
+            aria-hidden="true"
+            data-testid="anime-avatar"
+          >
+            <div className={styles.avatarGlow} />
+            <svg className={styles.avatarSvg} viewBox="0 0 240 240" role="img">
+              <defs>
+                <radialGradient id="avatarBacklight" cx="50%" cy="36%" r="66%">
+                  <stop offset="0%" stopColor="#f8fbff" />
+                  <stop offset="58%" stopColor="#cfe9ff" />
+                  <stop offset="100%" stopColor="#a9d1ff" />
+                </radialGradient>
+                <linearGradient id="avatarSkin" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#ffe4cf" />
+                  <stop offset="100%" stopColor="#f5ad86" />
+                </linearGradient>
+                <linearGradient id="avatarHair" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="#2e1b15" />
+                  <stop offset="56%" stopColor="#53301e" />
+                  <stop offset="100%" stopColor="#22120e" />
+                </linearGradient>
+                <linearGradient id="avatarSweater" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="#263846" />
+                  <stop offset="100%" stopColor="#111923" />
+                </linearGradient>
+              </defs>
+              <circle cx="120" cy="112" r="94" fill="url(#avatarBacklight)" />
+              <ellipse className={styles.avatarShadow} cx="120" cy="213" rx="52" ry="12" fill="#8eb8e1" opacity="0.22" />
+              <path d="M64 218c8-34 28-51 56-51s48 17 56 51H64z" fill="url(#avatarSweater)" />
+              <path d="M82 188c9 18 25 29 38 29s29-11 38-29" fill="none" stroke="#f8fbff" strokeWidth="6" strokeLinecap="round" opacity="0.88" />
+              <g className={styles.avatarHead}>
+                <path className={styles.avatarHairBack} d="M57 117c0-51 27-84 66-84 38 0 65 29 65 78 0 47-26 77-66 77-39 0-65-28-65-71z" fill="url(#avatarHair)" />
+                <path d="M75 118c0-41 19-67 50-67 31 0 51 27 51 68 0 39-22 66-51 66-30 0-50-26-50-67z" fill="url(#avatarSkin)" />
+                <path className={styles.avatarFringe} d="M58 108c3-46 27-77 66-77 35 0 62 27 65 67-23-9-42-28-48-54-11 38-40 62-83 64z" fill="url(#avatarHair)" />
+                <path d="M78 116c8-4 19-4 27 0" fill="none" stroke="#2c1a14" strokeWidth="5" strokeLinecap="round" opacity="0.72" />
+                <path d="M136 116c8-4 19-4 27 0" fill="none" stroke="#2c1a14" strokeWidth="5" strokeLinecap="round" opacity="0.72" />
+                <g className={styles.avatarEyes}>
+                  <ellipse cx="93" cy="131" rx="12" ry="16" fill="#211510" />
+                  <ellipse cx="149" cy="131" rx="12" ry="16" fill="#211510" />
+                  <circle cx="89" cy="126" r="4" fill="#fff" opacity="0.92" />
+                  <circle cx="145" cy="126" r="4" fill="#fff" opacity="0.92" />
+                  <circle cx="97" cy="137" r="3" fill="#a77b5f" opacity="0.72" />
+                  <circle cx="153" cy="137" r="3" fill="#a77b5f" opacity="0.72" />
+                </g>
+                <ellipse cx="73" cy="147" rx="12" ry="8" fill="#f29a94" opacity="0.38" />
+                <ellipse cx="170" cy="147" rx="12" ry="8" fill="#f29a94" opacity="0.38" />
+                <g className={styles.avatarMouth}>
+                  <path className={styles.mouthSmile} d="M106 158c8 9 22 9 30 0" fill="none" stroke="#a55457" strokeWidth="4" strokeLinecap="round" />
+                  <ellipse className={styles.mouthOpen} cx="121" cy="160" rx="12" ry="8" fill="#7d3137" />
+                  <ellipse className={styles.mouthWide} cx="121" cy="160" rx="17" ry="6" fill="#7d3137" />
+                </g>
+              </g>
+            </svg>
+            <div className={styles.avatarListeningRing} />
           </div>
 
           <div className={styles.soundWave} aria-hidden="true">
@@ -990,7 +1149,7 @@ export default function VoiceAssistantPage() {
             {voiceState === 'listening'
               ? '请开始说话'
               : voiceState === 'speaking'
-                ? '我正在回答，可以点麦克风打断'
+                ? '我正在回答，您直接说话即可打断'
                 : voiceState === 'thinking'
                   ? '正在生成回复'
                   : '点击麦克风开始'}
@@ -1020,10 +1179,10 @@ export default function VoiceAssistantPage() {
           <button
             className={`${styles.iconButton} ${autoBargeInEnabled ? styles.iconButtonActive : ''}`}
             type="button"
-            title={autoBargeInEnabled ? '关闭试验性智能打断' : '开启试验性智能打断'}
+            title={autoBargeInEnabled ? '自动语音打断已开启' : '开启自动语音打断'}
             onClick={() => setAutoBargeInEnabled(value => !value)}
           >
-            <Square size={28} />
+            <Activity size={28} />
           </button>
           <button className={styles.hangupButton} onClick={endCall} title="挂断并重开">
             <PhoneOff size={30} />
