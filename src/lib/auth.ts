@@ -6,6 +6,7 @@
 import { sign, verify, TokenExpiredError, JsonWebTokenError } from 'jsonwebtoken';
 import { getUserById } from './db';
 import { logger } from './logger';
+import { AppError, ErrorCodes } from './errors';
 
 // JWT 密钥 - 必须从环境变量读取
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -98,13 +99,13 @@ export function requireAuth(request: Request): string {
 /**
  * 认证错误类
  */
-export class AuthenticationError extends Error {
+export class AuthenticationError extends AppError {
   constructor(
     message: string,
-    public code: string,
+    public code: string = ErrorCodes.UNAUTHORIZED,
     public statusCode: number = 401
   ) {
-    super(message);
+    super(message, code, statusCode, false);
     this.name = 'AuthenticationError';
   }
 }
@@ -112,13 +113,13 @@ export class AuthenticationError extends Error {
 /**
  * 权限错误类
  */
-export class AuthorizationError extends Error {
+export class AuthorizationError extends AppError {
   constructor(
     message: string,
-    public code: string = 'FORBIDDEN',
+    public code: string = ErrorCodes.FORBIDDEN,
     public statusCode: number = 403
   ) {
-    super(message);
+    super(message, code, statusCode, false);
     this.name = 'AuthorizationError';
   }
 }

@@ -635,6 +635,210 @@
   background: var(--color-neutral-200, #EDE8E1);
 }
 
+/* AI 相框电话式语音页 */
+.frameCallPage {
+  background: #1f2520;
+  color: #fffaf2;
+  min-height: 100svh;
+}
+
+.frameCallShell {
+  min-height: 100svh;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.frameCallTopbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.frameSecondaryBtn,
+.frameInterruptBtn,
+.frameTextFallback button,
+.memoryCandidateActions button {
+  min-height: 58px;
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0.8rem 1.1rem;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.frameSecondaryBtn {
+  background: rgba(255, 250, 242, 0.14);
+  color: #fffaf2;
+}
+
+.frameCallStatus {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.frameStatusDot {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 999px;
+  background: #c9b79d;
+}
+
+.frameState_listening,
+.frameState_speaking {
+  background: #83c59b;
+}
+
+.frameState_thinking,
+.frameState_connecting {
+  background: #e3bd72;
+}
+
+.frameState_interrupted,
+.frameState_error {
+  background: #dc8d7b;
+}
+
+.frameSubtitlePanel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1.25rem;
+  padding: 2rem 0;
+  max-height: min(58vh, 620px);
+  overflow-y: auto;
+}
+
+.frameSubtitlePanel p {
+  margin: 0;
+  line-height: 1.55;
+  font-size: clamp(1.75rem, 4vw, 3.75rem);
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.frameAssistantLine {
+  color: #fff7e8;
+}
+
+.frameUserLine {
+  color: #bfe7c9;
+}
+
+.frameNotice {
+  padding: 0.9rem 1rem;
+  border-radius: 0.5rem;
+  background: rgba(255, 250, 242, 0.12);
+  color: #f4e5ca;
+  line-height: 1.5;
+}
+
+.frameCallControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px;
+  gap: 1rem;
+}
+
+.framePrimaryBtn {
+  min-height: 88px;
+  border: 0;
+  border-radius: 0.75rem;
+  background: #f0d3a0;
+  color: #251f18;
+  font-size: 2rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.framePrimaryBtn:disabled,
+.frameInterruptBtn:disabled,
+.frameTextFallback button:disabled,
+.memoryCandidateActions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.frameInterruptBtn {
+  background: #d98b76;
+  color: #fffaf2;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.frameTextFallback {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
+  gap: 0.75rem;
+}
+
+.frameTextFallback textarea {
+  width: 100%;
+  resize: none;
+  border: 2px solid rgba(255, 250, 242, 0.28);
+  border-radius: 0.5rem;
+  background: rgba(255, 250, 242, 0.08);
+  color: #fffaf2;
+  padding: 0.9rem 1rem;
+  font: inherit;
+  font-size: 1.1rem;
+}
+
+.frameTextFallback button,
+.memoryCandidateActions button {
+  background: #fffaf2;
+  color: #251f18;
+  font-weight: 700;
+}
+
+.memoryConfirmPanel {
+  padding: 1rem;
+  border: 1px solid rgba(255, 250, 242, 0.2);
+  border-radius: 0.75rem;
+  background: rgba(255, 250, 242, 0.08);
+}
+
+.memoryConfirmPanel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.25rem;
+}
+
+.memoryCandidateItem {
+  padding: 0.85rem 0;
+  border-top: 1px solid rgba(255, 250, 242, 0.15);
+}
+
+.memoryCandidateItem p {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.memoryCandidateItem small {
+  display: block;
+  color: #e3d3b9;
+  line-height: 1.5;
+}
+
+.memoryCandidateActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.memoryCandidateActions span {
+  color: #f0d3a0;
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .onboardingContainer {
@@ -664,6 +868,23 @@
   .skipBtn,
   .restBtn {
     width: 100%;
+  }
+
+  .frameCallShell {
+    padding: 1rem;
+  }
+
+  .frameCallTopbar,
+  .frameCallControls,
+  .frameTextFallback {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .framePrimaryBtn {
+    min-height: 76px;
+    font-size: 1.5rem;
   }
 }
 

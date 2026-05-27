@@ -33,6 +33,11 @@ import {
   AvatarProfile,
   InterviewPhase,
   ExportFormat,
+  ConversationSession,
+  MemoryCandidate,
+  InterviewMaterial,
+  ChildVisibleSummary,
+  VoiceSessionRecord,
 } from '@/types';
 
 // 数据文件路径
@@ -54,6 +59,11 @@ const CONSENTS_FILE = path.join(DATA_DIR, 'consents.json');
 const ACTION_LOGS_FILE = path.join(DATA_DIR, 'action-logs.json');
 const VOICE_PERSONAS_FILE = path.join(DATA_DIR, 'voice-personas.json');
 const AVATARS_FILE = path.join(DATA_DIR, 'avatars.json');
+const CONVERSATION_SESSIONS_FILE = path.join(DATA_DIR, 'conversation-sessions.json');
+const MEMORY_CANDIDATES_FILE = path.join(DATA_DIR, 'memory-candidates.json');
+const INTERVIEW_MATERIALS_FILE = path.join(DATA_DIR, 'interview-materials.json');
+const CHILD_SUMMARIES_FILE = path.join(DATA_DIR, 'child-summaries.json');
+const VOICE_SESSIONS_FILE = path.join(DATA_DIR, 'voice-sessions.json');
 
 // 标记是否已初始化
 let isInitialized = false;
@@ -97,6 +107,11 @@ function ensureDataFiles(): void {
   initFile(ACTION_LOGS_FILE);
   initFile(VOICE_PERSONAS_FILE);
   initFile(AVATARS_FILE);
+  initFile(CONVERSATION_SESSIONS_FILE);
+  initFile(MEMORY_CANDIDATES_FILE);
+  initFile(INTERVIEW_MATERIALS_FILE);
+  initFile(CHILD_SUMMARIES_FILE);
+  initFile(VOICE_SESSIONS_FILE);
 
   isInitialized = true;
   logger.info('数据文件初始化完成！');
@@ -683,6 +698,176 @@ export function getUserStats(userId: string): {
     totalCards: cardsResult.items.length,
     totalDrafts: draftsResult.items.length,
   };
+}
+
+// ==================== 基础 AI 对话 MVP 数据 ====================
+
+export function createConversationSession(
+  input: Omit<ConversationSession, 'id' | 'startedAt' | 'interruptionCount' | 'usedWebSearch' | 'citations' | 'riskFlags' | 'turnCount' | 'lastState'>
+): ConversationSession {
+  const sessions = readJsonFile<ConversationSession[]>(CONVERSATION_SESSIONS_FILE, []);
+  const newSession: ConversationSession = {
+    id: uuidv4(),
+    startedAt: new Date().toISOString(),
+    interruptionCount: 0,
+    usedWebSearch: false,
+    citations: [],
+    riskFlags: [],
+    turnCount: 0,
+    lastState: 'idle',
+    ...input,
+  };
+
+  sessions.push(newSession);
+  writeJsonFile(CONVERSATION_SESSIONS_FILE, sessions);
+  return newSession;
+}
+
+export function getConversationSessionById(id: string): ConversationSession | null {
+  const sessions = readJsonFile<ConversationSession[]>(CONVERSATION_SESSIONS_FILE, []);
+  return sessions.find(s => s.id === id) || null;
+}
+
+export function getUserConversationSessions(userId: string, pagination?: PaginationParams): PaginatedResult<ConversationSession> {
+  const sessions = readJsonFile<ConversationSession[]>(CONVERSATION_SESSIONS_FILE, []);
+  const userSessions = sessions
+    .filter(s => s.userId === userId)
+    .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+  return getPaginatedResult(userSessions, pagination);
+}
+
+export function updateConversationSession(id: string, updates: Partial<ConversationSession>): ConversationSession | null {
+  const sessions = readJsonFile<ConversationSession[]>(CONVERSATION_SESSIONS_FILE, []);
+  const index = sessions.findIndex(s => s.id === id);
+  if (index === -1) return null;
+
+  sessions[index] = { ...sessions[index], ...updates };
+  writeJsonFile(CONVERSATION_SESSIONS_FILE, sessions);
+  return sessions[index];
+}
+
+export function createMemoryCandidate(
+  input: Omit<MemoryCandidate, 'id' | 'createdAt' | 'status'>
+): MemoryCandidate {
+  const candidates = readJsonFile<MemoryCandidate[]>(MEMORY_CANDIDATES_FILE, []);
+  const newCandidate: MemoryCandidate = {
+    id: uuidv4(),
+    status: 'pending_elder_confirm',
+    createdAt: new Date().toISOString(),
+    ...input,
+  };
+
+  candidates.push(newCandidate);
+  writeJsonFile(MEMORY_CANDIDATES_FILE, candidates);
+  return newCandidate;
+}
+
+export function getMemoryCandidateById(id: string): MemoryCandidate | null {
+  const candidates = readJsonFile<MemoryCandidate[]>(MEMORY_CANDIDATES_FILE, []);
+  return candidates.find(c => c.id === id) || null;
+}
+
+export function getUserMemoryCandidates(userId: string, status?: MemoryCandidate['status']): MemoryCandidate[] {
+  const candidates = readJsonFile<MemoryCandidate[]>(MEMORY_CANDIDATES_FILE, []);
+  return candidates
+    .filter(c => c.userId === userId && (!status || c.status === status))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export function updateMemoryCandidate(id: string, updates: Partial<MemoryCandidate>): MemoryCandidate | null {
+  const candidates = readJsonFile<MemoryCandidate[]>(MEMORY_CANDIDATES_FILE, []);
+  const index = candidates.findIndex(c => c.id === id);
+  if (index === -1) return null;
+
+  candidates[index] = {
+    ...candidates[index],
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  writeJsonFile(MEMORY_CANDIDATES_FILE, candidates);
+  return candidates[index];
+}
+
+export function createInterviewMaterial(input: Omit<InterviewMaterial, 'id' | 'createdAt'>): InterviewMaterial {
+  const materials = readJsonFile<InterviewMaterial[]>(INTERVIEW_MATERIALS_FILE, []);
+  const newMaterial: InterviewMaterial = {
+    id: uuidv4(),
+    createdAt: new Date().toISOString(),
+    ...input,
+  };
+
+  materials.push(newMaterial);
+  writeJsonFile(INTERVIEW_MATERIALS_FILE, materials);
+  return newMaterial;
+}
+
+export function getUserInterviewMaterials(userId: string): InterviewMaterial[] {
+  const materials = readJsonFile<InterviewMaterial[]>(INTERVIEW_MATERIALS_FILE, []);
+  return materials
+    .filter(m => m.userId === userId)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export function createChildVisibleSummary(input: Omit<ChildVisibleSummary, 'id' | 'createdAt'>): ChildVisibleSummary {
+  const summaries = readJsonFile<ChildVisibleSummary[]>(CHILD_SUMMARIES_FILE, []);
+  const existingIndex = summaries.findIndex(s => s.sessionId === input.sessionId);
+  const summary: ChildVisibleSummary = {
+    id: existingIndex >= 0 ? summaries[existingIndex].id : uuidv4(),
+    createdAt: existingIndex >= 0 ? summaries[existingIndex].createdAt : new Date().toISOString(),
+    ...input,
+  };
+
+  if (existingIndex >= 0) {
+    summaries[existingIndex] = summary;
+  } else {
+    summaries.push(summary);
+  }
+
+  writeJsonFile(CHILD_SUMMARIES_FILE, summaries);
+  return summary;
+}
+
+export function getChildVisibleSummaryBySessionId(sessionId: string): ChildVisibleSummary | null {
+  const summaries = readJsonFile<ChildVisibleSummary[]>(CHILD_SUMMARIES_FILE, []);
+  return summaries.find(s => s.sessionId === sessionId) || null;
+}
+
+export function getUserChildVisibleSummaries(userId: string): ChildVisibleSummary[] {
+  const summaries = readJsonFile<ChildVisibleSummary[]>(CHILD_SUMMARIES_FILE, []);
+  return summaries
+    .filter(s => s.userId === userId)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export function createVoiceSessionRecord(
+  input: Omit<VoiceSessionRecord, 'id' | 'startedAt' | 'interruptionCount'>
+): VoiceSessionRecord {
+  const sessions = readJsonFile<VoiceSessionRecord[]>(VOICE_SESSIONS_FILE, []);
+  const record: VoiceSessionRecord = {
+    id: uuidv4(),
+    startedAt: new Date().toISOString(),
+    interruptionCount: 0,
+    ...input,
+  };
+
+  sessions.push(record);
+  writeJsonFile(VOICE_SESSIONS_FILE, sessions);
+  return record;
+}
+
+export function getVoiceSessionRecordById(id: string): VoiceSessionRecord | null {
+  const sessions = readJsonFile<VoiceSessionRecord[]>(VOICE_SESSIONS_FILE, []);
+  return sessions.find(s => s.id === id) || null;
+}
+
+export function updateVoiceSessionRecord(id: string, updates: Partial<VoiceSessionRecord>): VoiceSessionRecord | null {
+  const sessions = readJsonFile<VoiceSessionRecord[]>(VOICE_SESSIONS_FILE, []);
+  const index = sessions.findIndex(s => s.id === id);
+  if (index === -1) return null;
+
+  sessions[index] = { ...sessions[index], ...updates };
+  writeJsonFile(VOICE_SESSIONS_FILE, sessions);
+  return sessions[index];
 }
 
 /**

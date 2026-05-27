@@ -70,6 +70,16 @@ interface Message {
   analysis?: AIAnalysis;
 }
 
+interface MemoryCandidateLite {
+  id: string;
+  type: string;
+  content: string;
+  evidenceText: string;
+  status: string;
+}
+
+type FrameVoiceState = 'idle' | 'connecting' | 'listening' | 'thinking' | 'speaking' | 'interrupted' | 'error';
+
 interface ReviewScore {
   authenticity: number;
   coherence: number;
@@ -124,7 +134,7 @@ const phaseProgress: Record<string, number> = {
 
 export default function Home() {
   // 状态管理
-  const [currentView, setCurrentView] = useState<'onboarding' | 'onboarding_v2' | 'chat' | 'drafts' | 'timeline'>('onboarding_v2');
+  const [currentView, setCurrentView] = useState<'onboarding' | 'onboarding_v2' | 'chat' | 'voice_call' | 'drafts' | 'timeline'>('onboarding_v2');
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -138,6 +148,13 @@ export default function Home() {
   const [companionAvatar, setCompanionAvatar] = useState({ label: 'AI 助手', colorTone: 'warm' });  // 陪伴角色
   const [drafts, setDrafts] = useState<any[]>([]);  // 草稿列表
   const [isGeneratingMemoir, setIsGeneratingMemoir] = useState(false);  // 是否正在生成
+  const [frameVoiceState, setFrameVoiceState] = useState<FrameVoiceState>('idle');
+  const [frameConversationId, setFrameConversationId] = useState<string | null>(null);
+  const [frameVoiceSessionId, setFrameVoiceSessionId] = useState<string | null>(null);
+  const [frameMessages, setFrameMessages] = useState<Message[]>([]);
+  const [frameInput, setFrameInput] = useState('');
+  const [frameNotice, setFrameNotice] = useState('');
+  const [pendingMemoryCandidates, setPendingMemoryCandidates] = useState<MemoryCandidateLite[]>([]);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -149,6 +166,30 @@ export default function Home() {
   // 语音播报（TTS）
   const [isSpeaking, setIsSpeaking] = useState(false);
   const speakRef = useRef<any>(null);
+  const frameVoiceStateRef = useRef<FrameVoiceState>('idle');
+  const isSpeakingRef = useRef(false);
+  const frameVoiceSessionIdRef = useRef<string | null>(null);
+  const vadStreamRef = useRef<MediaStream | null>(null);
+  const vadAudioContextRef = useRef<AudioContext | null>(null);
+  const vadAnalyserRef = useRef<AnalyserNode | null>(null);
+  const vadIntervalRef = useRef<number | null>(null);
+  const vadHitCountRef = useRef(0);
+  const interruptTimeoutRef = useRef<number | null>(null);
+  const frameMessageAbortRef = useRef<AbortController | null>(null);
+  const frameCallActiveRef = useRef(false);
+  const frameRecognitionSentRef = useRef(false);
+
+  useEffect(() => {
+    frameVoiceStateRef.current = frameVoiceState;
+  }, [frameVoiceState]);
+
+  useEffect(() => {
+    isSpeakingRef.current = isSpeaking;
+  }, [isSpeaking]);
+
+  useEffect(() => {
+    frameVoiceSessionIdRef.current = frameVoiceSessionId;
+  }, [frameVoiceSessionId]);
 
   // 语音播报功能
   const speakText = (text: string) => {
@@ -183,6 +224,141 @@ export default function Home() {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       speechSynthesis.cancel();
       setIsSpeaking(false);
+    }
+  };
+
+  const speakFrameText = (text: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      setFrameNotice('当前浏览器不能播放语音，我会用大字幕显示回复。');
+      setFrameVoiceState('listening');
+      return;
+    }
+
+    speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'zh-CN';
+    utterance.rate = 0.86;
+    utterance.pitch = 1.0;
+
+    const voices = speechSynthesis.getVoices();
+    const chineseVoice = voices.find(v => v.lang.includes('zh'));
+    if (chineseVoice) utterance.voice = chineseVoice;
+
+    utterance.onstart = () => {
+      if (!frameCallActiveRef.current) return;
+      setIsSpeaking(true);
+      setFrameVoiceState('speaking');
+    };
+    utterance.onend = () => {
+      if (!frameCallActiveRef.current) return;
+      setIsSpeaking(false);
+      setFrameVoiceState('listening');
+    };
+    utterance.onerror = () => {
+      if (!frameCallActiveRef.current) return;
+      setIsSpeaking(false);
+      setFrameVoiceState('error');
+    };
+
+    speechSynthesis.speak(utterance);
+  };
+
+  const interruptFrameSpeech = async (reason: 'user_speech' | 'manual_stop' = 'manual_stop') => {
+    stopSpeaking();
+    setFrameVoiceState('interrupted');
+    const activeVoiceSessionId = frameVoiceSessionIdRef.current || frameVoiceSessionId;
+    if (activeVoiceSessionId) {
+      try {
+        await authenticatedFetch('/api/voice/session/interrupt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ voiceSessionId: activeVoiceSessionId, reason }),
+        });
+      } catch (error) {
+        logger.warn('语音打断记录失败', { error: String(error) });
+      }
+    }
+    if (interruptTimeoutRef.current !== null) {
+      window.clearTimeout(interruptTimeoutRef.current);
+    }
+    interruptTimeoutRef.current = window.setTimeout(() => {
+      if (frameVoiceStateRef.current === 'interrupted' && frameCallActiveRef.current) {
+        setFrameVoiceState('listening');
+      }
+      interruptTimeoutRef.current = null;
+    }, 300);
+  };
+
+  const stopFrameBargeInMonitor = () => {
+    if (vadIntervalRef.current !== null) {
+      window.clearInterval(vadIntervalRef.current);
+      vadIntervalRef.current = null;
+    }
+    vadHitCountRef.current = 0;
+    vadStreamRef.current?.getTracks().forEach(track => track.stop());
+    vadStreamRef.current = null;
+    vadAudioContextRef.current?.close().catch(() => {
+      // 忽略关闭中的浏览器状态错误
+    });
+    vadAudioContextRef.current = null;
+    vadAnalyserRef.current = null;
+  };
+
+  const startFrameBargeInMonitor = async () => {
+    if (typeof window === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setFrameNotice('当前浏览器不支持麦克风监听，仍可点击“打断”或用文字输入。');
+      return;
+    }
+    if (vadIntervalRef.current !== null) return;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+      const audioContext = new AudioContextCtor();
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 512;
+      audioContext.createMediaStreamSource(stream).connect(analyser);
+
+      vadStreamRef.current = stream;
+      vadAudioContextRef.current = audioContext;
+      vadAnalyserRef.current = analyser;
+
+      const samples = new Uint8Array(analyser.fftSize);
+      vadIntervalRef.current = window.setInterval(() => {
+        if (!isSpeakingRef.current || frameVoiceStateRef.current !== 'speaking') {
+          vadHitCountRef.current = 0;
+          return;
+        }
+
+        analyser.getByteTimeDomainData(samples);
+        let sumSquares = 0;
+        for (let i = 0; i < samples.length; i += 1) {
+          const centered = (samples[i] - 128) / 128;
+          sumSquares += centered * centered;
+        }
+        const rms = Math.sqrt(sumSquares / samples.length);
+
+        if (rms > 0.055) {
+          vadHitCountRef.current += 1;
+        } else {
+          vadHitCountRef.current = Math.max(0, vadHitCountRef.current - 1);
+        }
+
+        if (vadHitCountRef.current >= 3) {
+          vadHitCountRef.current = 0;
+          interruptFrameSpeech('user_speech');
+        }
+      }, 120);
+    } catch (error) {
+      logger.warn('自动打断监听不可用', { error: String(error) });
+      setFrameNotice('麦克风监听未开启，当前仍支持点击“开始说话”和“打断”。');
+      stopFrameBargeInMonitor();
     }
   };
 
@@ -252,6 +428,7 @@ export default function Home() {
         }
         recognitionRef.current = null;
       }
+      stopFrameBargeInMonitor();
     };
   }, []);
 
@@ -403,6 +580,236 @@ export default function Home() {
     const prefix = useHonorific ? '您好，' : '你好，';
     const suffix = useHonorific ? '您' : '你';
     return `${prefix}我是AI回忆录助手，很高兴认识${suffix}！\n\n我们可以慢慢聊，您可以告诉我一些关于${suffix}的事情。比如，${suffix}今天感觉怎么样？或者，${suffix}还记得小时候最难忘的事情吗？\n\n不用着急，想说什么就说什么，我们一步一步来。`;
+  };
+
+  const startFrameVoiceCall = async () => {
+    if (!user) return;
+
+    setFrameVoiceState('connecting');
+    setFrameNotice('');
+    setPendingMemoryCandidates([]);
+
+    try {
+      const sessionResponse = await authenticatedFetch('/api/conversation/session/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'web_voice_call', conversationType: 'ai_chat' }),
+      });
+      const sessionResult = await sessionResponse.json();
+      if (!sessionResult.success) {
+        throw new Error(sessionResult.error?.message || '基础对话会话创建失败');
+      }
+
+      const conversationId = sessionResult.data.session.id;
+      setFrameConversationId(conversationId);
+      frameCallActiveRef.current = true;
+
+      const voiceResponse = await authenticatedFetch('/api/voice/session/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationSessionId: conversationId }),
+      });
+      const voiceResult = await voiceResponse.json();
+      if (!voiceResult.success) {
+        throw new Error(voiceResult.error?.message || '语音会话创建失败');
+      }
+
+      setFrameVoiceSessionId(voiceResult.data.voiceSession.id);
+      if (voiceResult.data.voiceSession.fallbackMode) {
+        setFrameNotice('豆包实时语音尚未配置，当前使用浏览器 ASR/TTS Demo。API key 不会暴露给前端。');
+      }
+
+      const greeting = `${user.name}，您好。我在这儿，您想聊什么都可以。您说话的时候，我会认真听。`;
+      setFrameMessages([{ role: 'assistant', content: greeting, timestamp: new Date().toISOString() }]);
+      setCurrentView('voice_call');
+      await startFrameBargeInMonitor();
+      speakFrameText(greeting);
+    } catch (error) {
+      logger.error('启动相框通话失败', { error: String(error) });
+      setFrameVoiceState('error');
+      alert('启动 AI 通话失败，请检查配置或稍后再试');
+    }
+  };
+
+  const sendFrameMessage = async (rawText?: string) => {
+    const text = (rawText ?? frameInput).trim();
+    if (!text || !frameConversationId) return;
+
+    if (isSpeaking) {
+      await interruptFrameSpeech('user_speech');
+    }
+
+    setFrameInput('');
+    setFrameVoiceState('thinking');
+    setFrameMessages(prev => [...prev, { role: 'user', content: text, timestamp: new Date().toISOString() }]);
+    frameMessageAbortRef.current?.abort();
+    const abortController = new AbortController();
+    frameMessageAbortRef.current = abortController;
+
+    try {
+      const response = await authenticatedFetch('/api/conversation/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: frameConversationId, message: text }),
+        signal: abortController.signal,
+      });
+      const result = await response.json();
+      if (!frameCallActiveRef.current || abortController.signal.aborted) return;
+      if (!result.success) {
+        throw new Error(result.error?.message || 'AI 回复失败');
+      }
+
+      const assistantMessage = result.data.message;
+      setFrameMessages(prev => [...prev, { role: 'assistant', content: assistantMessage, timestamp: new Date().toISOString() }]);
+      if (result.data.memoryCandidates?.length) {
+        setPendingMemoryCandidates(prev => [...result.data.memoryCandidates, ...prev]);
+      }
+      if (result.data.usedWebSearch && !result.data.citations?.length) {
+        setFrameNotice('本轮识别为生活信息查询，但实时搜索服务尚未配置，因此没有伪装成实时联网结果。');
+      }
+      speakFrameText(assistantMessage);
+    } catch (error) {
+      if ((error as any)?.name === 'AbortError') return;
+      logger.error('相框通话消息失败', { error: String(error) });
+      setFrameVoiceState('error');
+      const errorText = '刚才我没有处理好。您可以再说一遍，或者先回到相框。';
+      setFrameMessages(prev => [...prev, { role: 'assistant', content: errorText, timestamp: new Date().toISOString() }]);
+      speakFrameText(errorText);
+    }
+  };
+
+  const startFrameListening = () => {
+    if (!recognitionRef.current) {
+      setFrameNotice('当前浏览器不支持语音识别，可以先用文字输入体验。');
+      return;
+    }
+
+    if (isRecording) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // 忽略已停止状态
+      }
+      setIsRecording(false);
+      setFrameVoiceState('idle');
+      return;
+    }
+
+    if (isSpeaking) {
+      interruptFrameSpeech('user_speech');
+    }
+
+    try {
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = 'zh-CN';
+      frameRecognitionSentRef.current = false;
+      recognitionRef.current.onresult = (event: any) => {
+        let finalText = '';
+        let interimText = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) finalText += transcript;
+          else interimText += transcript;
+        }
+        setFrameInput(finalText || interimText);
+        if (finalText.trim() && !frameRecognitionSentRef.current) {
+          frameRecognitionSentRef.current = true;
+          try {
+            recognitionRef.current.stop();
+          } catch {
+            // 忽略停止失败
+          }
+          sendFrameMessage(finalText);
+        }
+      };
+      recognitionRef.current.onerror = (event: any) => {
+        logger.error('相框语音识别错误', { error: event.error });
+        setFrameVoiceState('error');
+        const errorMap: Record<string, string> = {
+          'not-allowed': '麦克风权限被拒绝了。请在浏览器设置里允许麦克风，然后再试一次。',
+          'service-not-allowed': '浏览器暂时不允许使用语音识别服务，可以先用文字输入。',
+          'audio-capture': '没有检测到可用麦克风，请检查设备或权限。',
+          'no-speech': '我没有听到声音，可以靠近一点再说。',
+        };
+        setFrameNotice(errorMap[event.error] || '我没听清，可以再点一次“开始说话”。');
+      };
+      recognitionRef.current.onend = () => {
+        setIsRecording(false);
+        setFrameVoiceState(prev => prev === 'listening' ? 'idle' : prev);
+      };
+      recognitionRef.current.start();
+      setIsRecording(true);
+      setFrameVoiceState('listening');
+    } catch (error) {
+      logger.error('启动相框语音识别失败', { error: String(error) });
+      setFrameVoiceState('error');
+    }
+  };
+
+  const endFrameVoiceCall = async () => {
+    stopSpeaking();
+    stopFrameBargeInMonitor();
+    frameCallActiveRef.current = false;
+    frameMessageAbortRef.current?.abort();
+    frameMessageAbortRef.current = null;
+    if (interruptTimeoutRef.current !== null) {
+      window.clearTimeout(interruptTimeoutRef.current);
+      interruptTimeoutRef.current = null;
+    }
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {
+        // 忽略已停止状态
+      }
+    }
+    setIsRecording(false);
+
+    try {
+      if (frameConversationId) {
+        await authenticatedFetch('/api/conversation/session/end', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: frameConversationId }),
+        });
+      }
+      if (frameVoiceSessionId) {
+        await authenticatedFetch('/api/voice/session/end', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ voiceSessionId: frameVoiceSessionId }),
+        });
+      }
+    } catch (error) {
+      logger.warn('结束相框通话记录失败', { error: String(error) });
+    }
+
+    setFrameVoiceState('idle');
+    setFrameConversationId(null);
+    setFrameVoiceSessionId(null);
+    setFrameInput('');
+    setFrameNotice('');
+    setPendingMemoryCandidates([]);
+    setCurrentView('chat');
+  };
+
+  const updateMemoryCandidateStatus = async (candidateId: string, action: 'confirm' | 'reject') => {
+    try {
+      const response = await authenticatedFetch(`/api/memory/candidates/${candidateId}/${action}`, {
+        method: 'POST',
+      });
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.error?.message || '候选记忆操作失败');
+      }
+      setPendingMemoryCandidates(prev => prev.map(candidate => (
+        candidate.id === candidateId ? { ...candidate, status: result.data.candidate.status } : candidate
+      )));
+    } catch (error) {
+      logger.error('候选记忆操作失败', { error: String(error) });
+      alert('操作失败，请稍后再试');
+    }
   };
 
   // 发送消息
@@ -886,6 +1293,104 @@ export default function Home() {
     );
   };
 
+  const renderFrameVoiceCall = () => {
+    const stateLabel: Record<FrameVoiceState, string> = {
+      idle: '可以开始说话',
+      connecting: '正在连接',
+      listening: '正在听您说',
+      thinking: '正在想一想',
+      speaking: 'AI 正在说话',
+      interrupted: '已打断',
+      error: '需要重试',
+    };
+
+    return (
+      <main className={`${styles.main} ${styles.frameCallPage} ${displayMode === 'large' ? styles.largeText : ''} ${displayMode === 'high_contrast' ? styles.highContrast : ''}`}>
+        <section className={styles.frameCallShell}>
+          <div className={styles.frameCallTopbar}>
+            <button className={styles.frameSecondaryBtn} onClick={endFrameVoiceCall}>
+              退出回到相框
+            </button>
+            <div className={styles.frameCallStatus} role="status" aria-live="polite">
+              <span className={`${styles.frameStatusDot} ${styles[`frameState_${frameVoiceState}`] || ''}`} />
+              {stateLabel[frameVoiceState]}
+            </div>
+          </div>
+
+          <div className={styles.frameSubtitlePanel}>
+            {frameMessages.length === 0 ? (
+              <p>点下面的大按钮，就可以和 AI 说话。</p>
+            ) : (
+              frameMessages.slice(-2).map((msg, index) => (
+                <p key={`${msg.timestamp}-${index}`} className={msg.role === 'assistant' ? styles.frameAssistantLine : styles.frameUserLine}>
+                  {msg.content}
+                </p>
+              ))
+            )}
+          </div>
+
+          {frameNotice && <div className={styles.frameNotice} role="alert" aria-live="assertive">{frameNotice}</div>}
+
+          <div className={styles.frameCallControls}>
+            <button
+              className={styles.framePrimaryBtn}
+              onClick={startFrameListening}
+              disabled={frameVoiceState === 'thinking'}
+            >
+              {isRecording ? '停止听' : frameVoiceState === 'speaking' ? '打断并说话' : '开始说话'}
+            </button>
+            <button
+              className={styles.frameInterruptBtn}
+              onClick={() => interruptFrameSpeech('manual_stop')}
+              disabled={frameVoiceState !== 'speaking'}
+            >
+              打断
+            </button>
+          </div>
+
+          <div className={styles.frameTextFallback}>
+            <textarea
+              value={frameInput}
+              onChange={(event) => setFrameInput(event.target.value)}
+              placeholder="麦克风不好用？也可以在这里打字"
+              rows={2}
+            />
+            <button onClick={() => sendFrameMessage()} disabled={!frameInput.trim() || frameVoiceState === 'thinking'}>
+              发送
+            </button>
+          </div>
+
+          {pendingMemoryCandidates.length > 0 && (
+            <aside className={styles.memoryConfirmPanel}>
+              <h2>我可以这样记住吗？</h2>
+              {pendingMemoryCandidates.slice(0, 4).map(candidate => (
+                <div key={candidate.id} className={styles.memoryCandidateItem}>
+                  <p>{candidate.content}</p>
+                  <small>原话：{candidate.evidenceText}</small>
+                  <div className={styles.memoryCandidateActions}>
+                    <button
+                      onClick={() => updateMemoryCandidateStatus(candidate.id, 'confirm')}
+                      disabled={candidate.status !== 'pending_elder_confirm' && candidate.status !== 'edited'}
+                    >
+                      可以记住
+                    </button>
+                    <button
+                      onClick={() => updateMemoryCandidateStatus(candidate.id, 'reject')}
+                      disabled={candidate.status === 'rejected' || candidate.status === 'confirmed'}
+                    >
+                      不要记
+                    </button>
+                    <span>{candidate.status === 'confirmed' ? '已记住' : candidate.status === 'rejected' ? '已忽略' : '待确认'}</span>
+                  </div>
+                </div>
+              ))}
+            </aside>
+          )}
+        </section>
+      </main>
+    );
+  };
+
   // 渲染欢迎页面（设置）
   if (currentView === 'onboarding') {
     return (
@@ -1042,6 +1547,10 @@ logger.debug('Onboarding v2 完成', { data, track });
     );
   }
 
+  if (currentView === 'voice_call') {
+    return renderFrameVoiceCall();
+  }
+
   // 渲染主聊天界面
   return (
     <main className={`${styles.main} ${displayMode === 'large' ? styles.largeText : ''} ${displayMode === 'high_contrast' ? styles.highContrast : ''}`}>
@@ -1058,6 +1567,13 @@ logger.debug('Onboarding v2 完成', { data, track });
             <span className={styles.companionAvatar}>👩‍🦰</span>
             <span className={styles.companionName}>AI 助手</span>
           </div>
+          <button
+            className={styles.iconBtn}
+            onClick={startFrameVoiceCall}
+            title="AI 相框通话"
+          >
+            ☎️ AI聊天
+          </button>
           <button
             className={styles.iconBtn}
             onClick={() => {

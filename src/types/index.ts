@@ -857,3 +857,130 @@ export interface AvatarProfile {
   createdAt: string;
   updatedAt: string;
 }
+
+// =====================================================
+// 基础 AI 对话 MVP - 相框语音对话与记忆沉淀
+// =====================================================
+
+export type ConversationMode = 'text' | 'web_voice_call';
+
+export type ConversationType = 'ai_chat' | 'memory_topic';
+
+export type VoiceState =
+  | 'idle'
+  | 'connecting'
+  | 'listening'
+  | 'thinking'
+  | 'speaking'
+  | 'interrupted'
+  | 'error';
+
+export interface ToolCitation {
+  title: string;
+  url: string;
+  accessedAt: string;
+  summary: string;
+}
+
+export interface ConversationSession {
+  id: string;
+  userId: string;
+  mode: ConversationMode;
+  conversationType: ConversationType;
+  startedAt: string;
+  endedAt?: string;
+  summary?: string;
+  interruptionCount: number;
+  usedWebSearch: boolean;
+  citations: ToolCitation[];
+  riskFlags: string[];
+  turnCount: number;
+  lastState: VoiceState;
+}
+
+export type MemoryCandidateStatus =
+  | 'pending_elder_confirm'
+  | 'confirmed'
+  | 'rejected'
+  | 'edited';
+
+export type MemoryCandidateType =
+  | 'profile'
+  | 'family_member'
+  | 'preference'
+  | 'taboo_topic'
+  | 'life_event'
+  | 'quote';
+
+export interface MemoryCandidate {
+  id: string;
+  userId: string;
+  sourceSessionId: string;
+  sourceMessageId?: string;
+  type: MemoryCandidateType;
+  content: string;
+  evidenceText: string;
+  confidence: number;
+  status: MemoryCandidateStatus;
+  createdAt: string;
+  updatedAt?: string;
+  confirmedMemoryCardId?: string;
+}
+
+export interface InterviewMaterial {
+  id: string;
+  userId: string;
+  sourceSessionId: string;
+  title: string;
+  excerpt: string;
+  suggestedTopic?: string;
+  createdAt: string;
+}
+
+export interface ChildVisibleSummary {
+  id: string;
+  userId: string;
+  sessionId: string;
+  title: string;
+  bulletSummary: string[];
+  memoryCandidateIds: string[];
+  interviewMaterialIds: string[];
+  riskFlags: string[];
+  citations: Array<{ title: string; url: string }>;
+  createdAt: string;
+}
+
+export type SearchToolIntent =
+  | 'weather'
+  | 'holiday'
+  | 'news_summary'
+  | 'encyclopedia'
+  | 'health_low_risk';
+
+export interface SearchToolRequest {
+  userId: string;
+  sessionId: string;
+  intent: SearchToolIntent;
+  query: string;
+  locationHint?: string;
+}
+
+export interface SearchToolResult {
+  answerContext: string;
+  citations: ToolCitation[];
+  riskLevel: 'low' | 'medium' | 'high';
+}
+
+export interface VoiceSessionRecord {
+  id: string;
+  userId: string;
+  conversationSessionId?: string;
+  provider: 'doubao';
+  providerConfigured: boolean;
+  fallbackMode: boolean;
+  state: VoiceState;
+  startedAt: string;
+  endedAt?: string;
+  interruptionCount: number;
+  errorMessage?: string;
+}
