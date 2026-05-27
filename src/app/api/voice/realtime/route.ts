@@ -8,12 +8,14 @@ import {
   closeDoubaoRealtimeRuntime,
   connectDoubaoRealtimeRuntime,
   forwardDoubaoAudioChunk,
+  flushDoubaoRealtimeOutput,
+  flushDoubaoRealtimeTextOutput,
   createRealtimeVoiceSession,
   getRealtimeVoiceSession,
-  getRealtimeProviderEvents,
   interruptRealtimeVoiceSession,
   interruptDoubaoRealtimeRuntime,
   RealtimeAudioChunk,
+  DoubaoProviderOperationResult,
   RealtimeVoiceEvent,
   toLegacyVoiceState,
   transitionRealtimeVoiceSession,
@@ -29,6 +31,7 @@ type RealtimeAction =
   | 'assistant_started'
   | 'assistant_completed'
   | 'cancel_ack'
+  | 'poll_output'
   | 'interrupt'
   | 'close'
   | 'provider_timeout'
@@ -60,6 +63,7 @@ function getAction(value: unknown): RealtimeAction | null {
     'assistant_started',
     'assistant_completed',
     'cancel_ack',
+    'poll_output',
     'interrupt',
     'close',
     'provider_timeout',
@@ -85,11 +89,57 @@ function assertOwnedSession(sessionId: unknown, userId: string) {
   return { session };
 }
 
+type ClientProviderResult = Pick<
+  DoubaoProviderOperationResult,
+  'ok' | 'providerConfigured' | 'providerConnected' | 'forwarded' | 'reason'
+>;
+
+function toClientProviderResult(result: DoubaoProviderOperationResult | undefined): ClientProviderResult | undefined {
+  if (!result) return undefined;
+  const base: ClientProviderResult = {
+    ok: result.ok,
+    providerConfigured: result.providerConfigured,
+    providerConnected: result.providerConnected,
+    forwarded: result.forwarded,
+  };
+  if (!result.reason) return base;
+  const safeReasons = [
+    'already_connected',
+    'connected_binary_protocol_session_start_sent',
+    'connected_waiting_for_binary_protocol_gate',
+    'binary_protocol_forward_disabled_until_provider_smoke_is_verified',
+    'provider_session_not_ready_audio_queued',
+    'provider_not_configured',
+    'provider_not_connected',
+    'runtime_not_connected',
+  ];
+  if (safeReasons.includes(result.reason) || result.reason.startsWith('missing_config:')) {
+    return { ...base, reason: result.reason };
+  }
+  return {
+    ...base,
+    reason: 'provider_connection_failed',
+  };
+}
+
 function toResponseData(session: NonNullable<ReturnType<typeof getRealtimeVoiceSession>>) {
   return {
-    realtimeSession: session,
+    realtimeSession: {
+      id: session.id,
+      provider: session.provider,
+      providerConfigured: session.providerConfigured,
+      fallbackMode: session.fallbackMode,
+      state: session.state,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+      endedAt: session.endedAt,
+      interruptionCount: session.interruptionCount,
+      audioChunksReceived: session.audioChunksReceived,
+      audioMsReceived: session.audioMsReceived,
+      lastAudioSequence: session.lastAudioSequence,
+      staleResponseGuard: session.staleResponseGuard,
+    },
     legacyState: toLegacyVoiceState(session.state),
-    providerEvents: getRealtimeProviderEvents(session.id),
   };
 }
 
@@ -151,7 +201,13 @@ export async function POST(request: NextRequest) {
         ? undefined
         : await connectDoubaoRealtimeRuntime(session.id);
       const current = getRealtimeVoiceSession(session.id) || session;
-      return NextResponse.json({ success: true, data: { ...toResponseData(current), providerConnection } });
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...toResponseData(current),
+          providerConnection: toClientProviderResult(providerConnection),
+        },
+      });
     }
 
     const owned = assertOwnedSession(body.realtimeSessionId, userId);
@@ -173,7 +229,27 @@ export async function POST(request: NextRequest) {
       const { session, transition } = appendRealtimeAudioChunk(owned.session.id, chunk);
       const providerForward = await forwardDoubaoAudioChunk(owned.session.id, chunk);
       const current = getRealtimeVoiceSession(owned.session.id) || session!;
-      return NextResponse.json({ success: true, data: { ...toResponseData(current), transition, providerForward } });
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...toResponseData(current),
+          transition,
+          providerForward: toClientProviderResult(providerForward),
+          audioDeltas: providerForward.audioDeltas || [],
+          textDeltas: flushDoubaoRealtimeTextOutput(owned.session.id),
+        },
+      });
+    }
+
+    if (action === 'poll_output') {
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...toResponseData(owned.session),
+          audioDeltas: flushDoubaoRealtimeOutput(owned.session.id),
+          textDeltas: flushDoubaoRealtimeTextOutput(owned.session.id),
+        },
+      });
     }
 
     if (action === 'interrupt') {
@@ -186,13 +262,26 @@ export async function POST(request: NextRequest) {
         );
       }
       const providerInterrupt = await interruptDoubaoRealtimeRuntime(owned.session.id, reason);
-      return NextResponse.json({ success: true, data: { ...toResponseData(session!), transition, providerInterrupt } });
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...toResponseData(session!),
+          transition,
+          providerInterrupt: toClientProviderResult(providerInterrupt),
+        },
+      });
     }
 
     if (action === 'close') {
       const providerClose = closeDoubaoRealtimeRuntime(owned.session.id);
       const session = closeRealtimeVoiceSession(owned.session.id);
-      return NextResponse.json({ success: true, data: { ...toResponseData(session!), providerClose } });
+      return NextResponse.json({
+        success: true,
+        data: {
+          ...toResponseData(session!),
+          providerClose: toClientProviderResult(providerClose),
+        },
+      });
     }
 
     const event = actionToEvent[action];

@@ -1,7 +1,10 @@
 import crypto from 'crypto';
 import tls from 'tls';
 
-type WebSocketOpcode = 0x1 | 0x2 | 0x8 | 0x9 | 0xa;
+type WebSocketOpcode = 0x0 | 0x1 | 0x2 | 0x8 | 0x9 | 0xa;
+
+const WEBSOCKET_ACCEPT_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+const MAX_SERVER_FRAME_BYTES = 8 * 1024 * 1024;
 
 interface HeaderWebSocketOptions {
   url: string;
@@ -50,7 +53,11 @@ function encodeClientFrame(data: Buffer, opcode: WebSocketOpcode = 0x2): Buffer 
 function tryReadServerFrame(buffer: Buffer): { frame?: { opcode: WebSocketOpcode; payload: Buffer }; rest: Buffer } {
   if (buffer.length < 2) return { rest: buffer };
 
+  const fin = Boolean(buffer[0] & 0x80);
   const opcode = (buffer[0] & 0x0f) as WebSocketOpcode;
+  if (!fin || opcode === 0x0) {
+    throw new Error('Realtime provider continuation frames are not supported');
+  }
   const masked = Boolean(buffer[1] & 0x80);
   let payloadLength = buffer[1] & 0x7f;
   let offset = 2;
@@ -67,6 +74,10 @@ function tryReadServerFrame(buffer: Buffer): { frame?: { opcode: WebSocketOpcode
     }
     payloadLength = Number(longLength);
     offset += 8;
+  }
+
+  if (payloadLength > MAX_SERVER_FRAME_BYTES) {
+    throw new Error('Realtime provider WebSocket frame exceeds maximum size');
   }
 
   let mask: Buffer | undefined;
@@ -89,6 +100,24 @@ function tryReadServerFrame(buffer: Buffer): { frame?: { opcode: WebSocketOpcode
     frame: { opcode, payload },
     rest: buffer.subarray(offset + payloadLength),
   };
+}
+
+function expectedAcceptKey(websocketKey: string): string {
+  return crypto
+    .createHash('sha1')
+    .update(`${websocketKey}${WEBSOCKET_ACCEPT_GUID}`)
+    .digest('base64');
+}
+
+function parseHandshakeHeaders(headerText: string): { statusLine: string; headers: Record<string, string> } {
+  const [statusLine = '', ...lines] = headerText.split('\r\n');
+  const headers: Record<string, string> = {};
+  for (const line of lines) {
+    const separator = line.indexOf(':');
+    if (separator <= 0) continue;
+    headers[line.slice(0, separator).trim().toLowerCase()] = line.slice(separator + 1).trim();
+  }
+  return { statusLine, headers };
 }
 
 export async function connectHeaderWebSocket(options: HeaderWebSocketOptions): Promise<HeaderWebSocketConnection> {
@@ -165,9 +194,12 @@ export async function connectHeaderWebSocket(options: HeaderWebSocketOptions): P
           if (marker === -1) return;
 
           const headerText = handshakeBuffer.subarray(0, marker).toString('utf8');
-          const statusLine = headerText.split('\r\n')[0] || '';
+          const { statusLine, headers } = parseHandshakeHeaders(headerText);
           if (!statusLine.includes(' 101 ')) {
             throw new Error(`Realtime provider handshake failed: ${statusLine}`);
+          }
+          if (headers['sec-websocket-accept'] !== expectedAcceptKey(websocketKey)) {
+            throw new Error('Realtime provider handshake failed: invalid Sec-WebSocket-Accept');
           }
 
           connected = true;

@@ -4,12 +4,31 @@ import {
   getDoubaoRealtimeConfig,
   getDoubaoRealtimeConfigStatus,
 } from './doubao-config';
+import { decodeDoubaoFrame } from './doubao-codec';
 import { connectHeaderWebSocket, HeaderWebSocketConnection } from './header-websocket';
 import {
   markRealtimeProviderEvent,
+  getRealtimeVoiceSession,
+  isProviderOutputStale,
   transitionRealtimeVoiceSession,
 } from './session-store';
-import { RealtimeAudioChunk, RealtimeInterruptReason } from './types';
+import {
+  RealtimeAudioChunk,
+  RealtimeAudioDelta,
+  RealtimeInterruptReason,
+  RealtimeProviderEvent,
+  RealtimeTextDelta,
+} from './types';
+import {
+  buildDoubaoAudioTaskFrame,
+  buildDoubaoClientInterruptFrame,
+  buildDoubaoFinishConnectionFrame,
+  buildDoubaoFinishSessionFrame,
+  buildDoubaoStartConnectionFrame,
+  buildDoubaoStartSessionFrame,
+  describeDoubaoInputAudio,
+  translateDoubaoFrameToRealtimeOutput,
+} from './doubao-translator';
 
 export interface DoubaoProviderOperationResult {
   ok: boolean;
@@ -17,6 +36,7 @@ export interface DoubaoProviderOperationResult {
   providerConnected: boolean;
   forwarded: boolean;
   reason?: string;
+  audioDeltas?: RealtimeAudioDelta[];
 }
 
 interface DoubaoRuntime {
@@ -24,7 +44,11 @@ interface DoubaoRuntime {
   connectId: string;
   connection?: HeaderWebSocketConnection;
   connectedAt?: string;
+  providerSessionReadyAt?: string;
   lastError?: string;
+  pendingAudioDeltas: RealtimeAudioDelta[];
+  pendingTextDeltas: RealtimeTextDelta[];
+  pendingAudioFrames: RealtimeAudioChunk[];
 }
 
 const runtimes = new Map<string, DoubaoRuntime>();
@@ -36,9 +60,108 @@ function getOrCreateRuntime(sessionId: string): DoubaoRuntime {
   const runtime: DoubaoRuntime = {
     sessionId,
     connectId: uuidv4(),
+    pendingAudioDeltas: [],
+    pendingTextDeltas: [],
+    pendingAudioFrames: [],
   };
   runtimes.set(sessionId, runtime);
   return runtime;
+}
+
+function markProviderEvents(events: RealtimeProviderEvent[]): void {
+  for (const event of events) {
+    markRealtimeProviderEvent(event);
+  }
+}
+
+function handleDoubaoProviderMessage(
+  sessionId: string,
+  runtime: DoubaoRuntime,
+  payload: Buffer,
+  opcode: number
+): void {
+  const config = getDoubaoRealtimeConfig();
+  if (!config) return;
+
+  if (opcode !== 0x2) {
+    markRealtimeProviderEvent({
+      sessionId,
+      type: 'error',
+      receivedAt: new Date().toISOString(),
+      payload: {
+        provider: 'doubao',
+        message: 'unexpected_non_binary_provider_frame',
+        opcode,
+        byteLength: payload.length,
+      },
+    });
+    return;
+  }
+
+  try {
+    const decoded = decodeDoubaoFrame(payload);
+    const translated = translateDoubaoFrameToRealtimeOutput(sessionId, decoded, config);
+    markProviderEvents(translated.providerEvents);
+
+    if (decoded.eventName === 'SessionStarted') {
+      runtime.providerSessionReadyAt = new Date().toISOString();
+      transitionRealtimeVoiceSession(sessionId, 'provider_session_ready');
+      flushQueuedDoubaoAudioFrames(sessionId, runtime, config);
+    }
+    if (decoded.eventName === 'ServerInterrupted') {
+      runtime.pendingAudioDeltas = [];
+      transitionRealtimeVoiceSession(sessionId, 'provider_cancel_ack_or_stale_guard_active');
+    }
+    const session = getRealtimeVoiceSession(sessionId);
+    if (!session || !isProviderOutputStale(session.state, session.staleResponseGuard)) {
+      runtime.pendingAudioDeltas.push(...translated.audioDeltas);
+      runtime.pendingTextDeltas.push(...translated.textDeltas);
+      if (translated.audioDeltas.length > 0) {
+        transitionRealtimeVoiceSession(sessionId, 'audio_delta_or_response_start', { staleResponseGuard: false });
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    runtime.lastError = message;
+    markRealtimeProviderEvent({
+      sessionId,
+      type: 'error',
+      receivedAt: new Date().toISOString(),
+      payload: {
+        provider: 'doubao',
+        message: 'provider_frame_decode_failed',
+        detail: message,
+        byteLength: payload.length,
+      },
+    });
+  }
+}
+
+function sendDoubaoAudioFrame(
+  sessionId: string,
+  runtime: DoubaoRuntime,
+  chunk: RealtimeAudioChunk,
+  config: NonNullable<ReturnType<typeof getDoubaoRealtimeConfig>>
+): void {
+  runtime.connection!.send(buildDoubaoAudioTaskFrame(sessionId, chunk, config), 0x2);
+  markRealtimeProviderEvent({
+    sessionId,
+    type: 'input_audio.delta',
+    receivedAt: new Date().toISOString(),
+    payload: describeDoubaoInputAudio(chunk),
+  });
+}
+
+function flushQueuedDoubaoAudioFrames(
+  sessionId: string,
+  runtime: DoubaoRuntime,
+  config: NonNullable<ReturnType<typeof getDoubaoRealtimeConfig>>
+): void {
+  if (!runtime.connection?.connected || !runtime.providerSessionReadyAt) return;
+  const chunks = runtime.pendingAudioFrames.splice(0, runtime.pendingAudioFrames.length);
+  for (const chunk of chunks) {
+    sendDoubaoAudioFrame(sessionId, runtime, chunk, config);
+  }
 }
 
 export function isDoubaoRealtimeProviderConfigured(): boolean {
@@ -74,15 +197,7 @@ export async function connectDoubaoRealtimeRuntime(sessionId: string): Promise<D
       headers: buildDoubaoRealtimeHeaders(config, runtime.connectId),
       timeoutMs: config.connectTimeoutMs,
       onMessage: (payload, opcode) => {
-        markRealtimeProviderEvent({
-          sessionId,
-          type: opcode === 0x2 ? 'response.audio.delta' : 'transcript.delta',
-          receivedAt: new Date().toISOString(),
-          payload: {
-            opcode,
-            byteLength: payload.length,
-          },
-        });
+        handleDoubaoProviderMessage(sessionId, runtime, payload, opcode);
       },
       onClose: () => {
         runtimes.delete(sessionId);
@@ -98,7 +213,6 @@ export async function connectDoubaoRealtimeRuntime(sessionId: string): Promise<D
       },
     });
     runtime.connectedAt = new Date().toISOString();
-    transitionRealtimeVoiceSession(sessionId, 'provider_session_ready');
     markRealtimeProviderEvent({
       sessionId,
       type: 'session.created',
@@ -107,15 +221,23 @@ export async function connectDoubaoRealtimeRuntime(sessionId: string): Promise<D
         provider: 'doubao',
         resourceId: config.resourceId,
         model: config.model,
+        binaryProtocolForwarding: config.enableBinaryProtocolForward,
       },
     });
+
+    if (config.enableBinaryProtocolForward) {
+      runtime.connection.send(buildDoubaoStartConnectionFrame(config), 0x2);
+      runtime.connection.send(buildDoubaoStartSessionFrame(sessionId, config), 0x2);
+    }
 
     return {
       ok: true,
       providerConfigured: true,
       providerConnected: true,
       forwarded: false,
-      reason: 'connected_waiting_for_binary_codec',
+      reason: config.enableBinaryProtocolForward
+        ? 'connected_binary_protocol_session_start_sent'
+        : 'connected_waiting_for_binary_protocol_gate',
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -152,35 +274,35 @@ export async function forwardDoubaoAudioChunk(
     return connectionResult;
   }
 
-  if (!config.enableRawAudioForward) {
+  if (!config.enableBinaryProtocolForward) {
     return {
       ok: true,
       providerConfigured: true,
       providerConnected: true,
       forwarded: false,
-      reason: 'raw_audio_forward_disabled_until_binary_codec_is_verified',
+      reason: 'binary_protocol_forward_disabled_until_provider_smoke_is_verified',
     };
   }
 
-  runtime.connection.send(Buffer.from(chunk.base64Audio, 'base64'), 0x2);
-  markRealtimeProviderEvent({
-    sessionId,
-    type: 'input_audio.delta',
-    receivedAt: new Date().toISOString(),
-    payload: {
-      sequence: chunk.sequence,
-      codec: chunk.format.codec,
-      sampleRate: chunk.format.sampleRate,
-      channels: chunk.format.channels,
-      durationMs: chunk.durationMs,
-    },
-  });
+  if (!runtime.providerSessionReadyAt) {
+    runtime.pendingAudioFrames.push(chunk);
+    return {
+      ok: true,
+      providerConfigured: true,
+      providerConnected: true,
+      forwarded: false,
+      reason: 'provider_session_not_ready_audio_queued',
+    };
+  }
+
+  sendDoubaoAudioFrame(sessionId, runtime, chunk, config);
 
   return {
     ok: true,
     providerConfigured: true,
     providerConnected: true,
     forwarded: true,
+    audioDeltas: flushDoubaoRealtimeOutput(sessionId),
   };
 }
 
@@ -210,17 +332,18 @@ export async function interruptDoubaoRealtimeRuntime(
     };
   }
 
-  if (!config.enableJsonControlFrames) {
+  if (!config.enableBinaryProtocolForward) {
     return {
       ok: true,
       providerConfigured: true,
       providerConnected: true,
       forwarded: false,
-      reason: 'json_control_frames_disabled_until_binary_codec_is_verified',
+      reason: 'binary_protocol_forward_disabled_until_provider_smoke_is_verified',
     };
   }
 
-  runtime.connection.send(JSON.stringify({ type: 'interrupt', reason }), 0x1);
+  runtime.pendingAudioDeltas = [];
+  runtime.connection.send(buildDoubaoClientInterruptFrame(sessionId, reason, config), 0x2);
   return {
     ok: true,
     providerConfigured: true,
@@ -242,6 +365,15 @@ export function closeDoubaoRealtimeRuntime(sessionId: string): DoubaoProviderOpe
     };
   }
 
+  const config = getDoubaoRealtimeConfig();
+  if (config?.enableBinaryProtocolForward && runtime.connection.connected) {
+    try {
+      runtime.connection.send(buildDoubaoFinishSessionFrame(sessionId, config), 0x2);
+      runtime.connection.send(buildDoubaoFinishConnectionFrame(config), 0x2);
+    } catch {
+      // Closing should stay idempotent even if the upstream socket is already gone.
+    }
+  }
   runtime.connection.close();
   runtimes.delete(sessionId);
   return {
@@ -250,4 +382,30 @@ export function closeDoubaoRealtimeRuntime(sessionId: string): DoubaoProviderOpe
     providerConnected: false,
     forwarded: true,
   };
+}
+
+export function flushDoubaoRealtimeOutput(sessionId: string): RealtimeAudioDelta[] {
+  const runtime = runtimes.get(sessionId);
+  if (!runtime?.pendingAudioDeltas.length) return [];
+  const session = getRealtimeVoiceSession(sessionId);
+  if (session && isProviderOutputStale(session.state, session.staleResponseGuard)) {
+    runtime.pendingAudioDeltas = [];
+    return [];
+  }
+  const deltas = runtime.pendingAudioDeltas.splice(0, runtime.pendingAudioDeltas.length);
+  return deltas.map((delta, index) => ({
+    ...delta,
+    sequence: delta.sequence ?? index,
+  }));
+}
+
+export function flushDoubaoRealtimeTextOutput(sessionId: string): RealtimeTextDelta[] {
+  const runtime = runtimes.get(sessionId);
+  if (!runtime?.pendingTextDeltas.length) return [];
+  const session = getRealtimeVoiceSession(sessionId);
+  if (session && isProviderOutputStale(session.state, session.staleResponseGuard)) {
+    runtime.pendingTextDeltas = [];
+    return [];
+  }
+  return runtime.pendingTextDeltas.splice(0, runtime.pendingTextDeltas.length);
 }

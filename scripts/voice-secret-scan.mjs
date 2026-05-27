@@ -37,6 +37,10 @@ const secretPatterns = [
     pattern: /\b(?:DOUBAO|VOLCENGINE|OPENAI|LLM|SEARCH|QWEN|ZHIPU|SILICONFLOW)_API_KEY\s*=\s*["']?[A-Za-z0-9._-]{12,}/g
   },
   {
+    name: 'provider-secret-assignment',
+    pattern: /\b(?:DOUBAO_REALTIME|VOLC)_(?:ACCESS_KEY|APP_KEY)\s*=\s*["']?[A-Za-z0-9._-]{12,}/g
+  },
+  {
     name: 'aws-access-key',
     pattern: /AKIA[0-9A-Z]{16}/g
   }
@@ -77,6 +81,9 @@ function walk(targetPath) {
       pattern.lastIndex = 0;
       if (pattern.test(line)) {
         if (name === 'api-key-assignment' && /(your-api-key|=\s*\.\.\.)/.test(line)) {
+          continue;
+        }
+        if (name === 'provider-secret-assignment' && /(不写入仓库|secret storage|process\.env|\|\s*是\s*\|)/.test(line)) {
           continue;
         }
         findings.push({

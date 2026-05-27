@@ -9,9 +9,9 @@ let voiceSessionId = '';
 let candidateIds = [];
 const doubaoConfigured = Boolean(
   process.env.DOUBAO_REALTIME_ENABLED === 'true'
-  && process.env.DOUBAO_REALTIME_API_KEY
-  && process.env.DOUBAO_REALTIME_ENDPOINT
-  && process.env.DOUBAO_REALTIME_MODEL,
+  && (process.env.DOUBAO_REALTIME_APP_ID || process.env.VOLC_APP_ID)
+  && (process.env.DOUBAO_REALTIME_ACCESS_KEY || process.env.VOLC_ACCESS_KEY)
+  && (process.env.DOUBAO_REALTIME_APP_KEY || process.env.VOLC_APP_KEY),
 );
 
 function record(name, passed, detail = '') {
@@ -257,6 +257,8 @@ async function staticFrontendChecks() {
   expect(standalonePageSource.includes('AI 语音助手'), '存在独立 AI 语音助手页面');
   expect(standalonePageSource.includes("body: JSON.stringify({ mode: 'web_voice_call', conversationType: 'ai_chat' })"), '独立页面启动 web_voice_call 对话');
   expect(standalonePageSource.includes('startBargeInMonitor'), '独立页面包含自动打断 VAD 逻辑');
+  expect(standalonePageSource.includes("action: 'append_audio'"), '独立页面会上传 realtime 音频 chunk');
+  expect(standalonePageSource.includes("action: 'poll_output'"), '独立页面会轮询 provider audio delta');
   expect(standalonePageSource.includes('/api/memory/candidates/${candidateId}/${action}'), '独立页面支持候选记忆确认/拒绝');
   expect(standaloneStyleSource.includes('.captionPanel'), '独立页面包含大字幕样式');
   expect(standaloneStyleSource.includes('.primaryButton'), '独立页面包含主语音按钮样式');
@@ -266,7 +268,8 @@ function printReport() {
   const passed = results.filter(result => result.passed).length;
   const failed = results.length - passed;
   const issues = [
-    '真实豆包实时语音没有实现音频流协议：当前只有 Provider 配置检测、voice session 记录和前端浏览器 ASR/TTS fallback。',
+    'Doubao 二进制协议 codec/translator 已接入，但真实 provider smoke 仍需要用户配置 DOUBAO_REALTIME_FORWARD_BINARY_PROTOCOL=true 后验收。',
+    '浏览器端当前用 MediaRecorder 输出 WebM/Opus chunk；如果上游只接受 raw Opus 或 PCM，需要下一步改 AudioWorklet PCM16。',
     '浏览器端已补轻量 Web Audio VAD 自动打断，但仍不能等同真实全双工 RTC：会受设备回声、环境噪声、浏览器权限和 TTS 外放影响。',
     '联网工具默认未配置 SEARCH_API_ENDPOINT 时不会产生真实 citations，天气/新闻只能证明意图识别和安全降级。',
     'LLM 未配置时会走 fallback 回复，无法验证真实模型口语质量、追问质量和 prompt 遵循。',

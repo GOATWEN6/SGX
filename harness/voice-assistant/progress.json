@@ -1,7 +1,7 @@
 {
   "updatedAt": "2026-05-27",
-  "stage": "Sprint 0B",
-  "focus": "realtime voice contract and source gate readiness",
+  "stage": "Sprint 1B",
+  "focus": "Doubao realtime binary protocol codec and provider integration",
   "overallStatus": "in_progress",
   "currentBranch": "codex-voice-chat-standalone",
   "truthSource": [
@@ -43,7 +43,7 @@
     {
       "id": "implementation_gate",
       "name": "Implementation Gate",
-      "status": "not_started",
+      "status": "in_progress",
       "requiredEvidence": [
         "server-side realtime proxy spike",
         "browser audio chunk capture",
@@ -64,24 +64,28 @@
     }
   ],
   "knownGaps": [
-    "Current voice experience is browser ASR/TTS fallback, not true realtime provider audio.",
-    "Interrupt currently stops local playback only; provider cancel is not proven.",
+    "Doubao binary protocol is implemented behind DOUBAO_REALTIME_FORWARD_BINARY_PROTOCOL, but live provider smoke is still required.",
+    "Browser MediaRecorder currently sends WebM/Opus chunks; official provider may require raw Opus or PCM AudioWorklet conversion.",
+    "Provider audio/text delta polling exists, but true end-to-end playback quality, caption timing, and latency are not yet manually verified.",
     "Text model activation must be smoke tested before judging assistant quality.",
     "Web search has framework shape but lacks production search provider evidence.",
     "Sensitive memory confirmation needs stronger regression coverage."
   ],
   "nextActions": [
-    "Run npm run test:voice:realtime before realtime provider work.",
-    "Run Source Gate reproductions for Volcengine RTC AIGC Demo, LiveKit Agents, and Pipecat.",
-    "Write realtime provider contract tests before implementing proxy.",
-    "Build server-side realtime proxy skeleton that never exposes provider keys to the browser.",
-    "Add state-machine tests and manual interruption evidence."
+    "Run npm run test:voice:realtime after binary protocol integration.",
+    "Run npm run test:voice:secret to ensure provider credentials are not committed or returned.",
+    "Run JWT_SECRET=dev-build-secret npm run build.",
+    "With user-approved env, run a live Doubao provider smoke using DOUBAO_REALTIME_FORWARD_BINARY_PROTOCOL=true.",
+    "If provider rejects WebM/Opus chunks, replace MediaRecorder upload with AudioWorklet PCM16 capture."
   ],
   "currentEvidence": [
     "src/lib/voice/realtime/types.ts",
     "src/lib/voice/realtime/state-machine.ts",
     "src/lib/voice/realtime/session-store.ts",
     "src/lib/voice/realtime/doubao-config.ts",
+    "src/lib/voice/realtime/doubao-protocol-types.ts",
+    "src/lib/voice/realtime/doubao-codec.ts",
+    "src/lib/voice/realtime/doubao-translator.ts",
     "src/lib/voice/realtime/doubao-provider.ts",
     "src/lib/voice/realtime/header-websocket.ts",
     "src/app/api/voice/realtime/route.ts",

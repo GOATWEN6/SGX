@@ -47,6 +47,19 @@ export interface RealtimeAudioChunk {
   capturedAt?: string;
 }
 
+export interface RealtimeAudioDelta {
+  base64Audio: string;
+  mimeType: string;
+  sequence?: number;
+  receivedAt?: string;
+}
+
+export interface RealtimeTextDelta {
+  text: string;
+  role?: 'user' | 'assistant';
+  receivedAt?: string;
+}
+
 export interface RealtimeVoiceSessionConfig {
   userId: string;
   conversationSessionId?: string;

@@ -25,8 +25,14 @@ interface RealtimeAudioDelta {
   mimeType: string;
 }
 
+interface RealtimeTextDelta {
+  text: string;
+  role?: 'user' | 'assistant';
+}
+
 interface RealtimeAppendResponse {
   audioDeltas?: RealtimeAudioDelta[];
+  textDeltas?: RealtimeTextDelta[];
   providerForward?: {
     providerConnected: boolean;
     forwarded: boolean;
@@ -127,6 +133,7 @@ export default function VoiceAssistantPage() {
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const currentAudioUrlRef = useRef<string | null>(null);
   const isRealtimeAudioPlayingRef = useRef(false);
+  const realtimeOutputPollIntervalRef = useRef<number | null>(null);
 
   useEffect(() => {
     voiceStateRef.current = voiceState;
@@ -258,6 +265,29 @@ export default function VoiceAssistantPage() {
     playNextRealtimeAudio();
   };
 
+  const applyRealtimeTextDeltas = (deltas?: RealtimeTextDelta[]) => {
+    if (!deltas?.length) return;
+    const timestamp = new Date().toISOString();
+    setMessages(prev => {
+      const next = [...prev];
+      for (const delta of deltas) {
+        const text = delta.text.trim();
+        if (!text) continue;
+        if (!delta.role) {
+          setInput(text);
+          continue;
+        }
+        const last = next[next.length - 1];
+        if (last?.role === delta.role) {
+          next[next.length - 1] = { ...last, content: `${last.content}${text}` };
+        } else {
+          next.push({ role: delta.role, content: text, timestamp });
+        }
+      }
+      return next;
+    });
+  };
+
   const appendRealtimeAudioChunk = async (blob: Blob) => {
     const activeRealtimeSessionId = realtimeSessionIdRef.current;
     if (!activeRealtimeSessionId) return;
@@ -289,11 +319,41 @@ export default function VoiceAssistantPage() {
     const reason = result.data?.providerForward?.reason || '';
     if (reason && reason !== lastProviderForwardReasonRef.current) {
       lastProviderForwardReasonRef.current = reason;
-      if (reason.includes('binary_codec') || reason.includes('raw_audio_forward_disabled')) {
+      if (reason.includes('binary_protocol')) {
         setNotice('音频已经进入服务端 realtime 链路；Doubao 二进制协议转发仍处于保护模式，避免误发错误协议帧。');
       }
     }
     enqueueRealtimeAudio(result.data?.audioDeltas);
+    applyRealtimeTextDeltas(result.data?.textDeltas);
+  };
+
+  const stopRealtimeOutputPolling = () => {
+    if (realtimeOutputPollIntervalRef.current !== null) {
+      window.clearInterval(realtimeOutputPollIntervalRef.current);
+      realtimeOutputPollIntervalRef.current = null;
+    }
+  };
+
+  const pollRealtimeOutput = async () => {
+    const activeRealtimeSessionId = realtimeSessionIdRef.current;
+    if (!activeRealtimeSessionId || realtimeFallbackModeRef.current || !callActiveRef.current) return;
+    const response = await authenticatedFetch('/api/voice/realtime', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'poll_output', realtimeSessionId: activeRealtimeSessionId }),
+    });
+    const result = await response.json() as { success: boolean; data?: { audioDeltas?: RealtimeAudioDelta[]; textDeltas?: RealtimeTextDelta[] } };
+    if (result.success) {
+      enqueueRealtimeAudio(result.data?.audioDeltas);
+      applyRealtimeTextDeltas(result.data?.textDeltas);
+    }
+  };
+
+  const startRealtimeOutputPolling = () => {
+    stopRealtimeOutputPolling();
+    realtimeOutputPollIntervalRef.current = window.setInterval(() => {
+      pollRealtimeOutput().catch(() => {});
+    }, 350);
   };
 
   const commitRealtimeTurn = async () => {
@@ -313,6 +373,7 @@ export default function VoiceAssistantPage() {
     mediaRecorderRef.current = null;
     realtimeStreamRef.current?.getTracks().forEach(track => track.stop());
     realtimeStreamRef.current = null;
+    stopRealtimeOutputPolling();
     setIsRecording(false);
     if (voiceStateRef.current === 'listening') setVoiceState('idle');
     if (commitTurn) await commitRealtimeTurn();
@@ -478,7 +539,9 @@ export default function VoiceAssistantPage() {
         const realtimeResult = await realtimeResponse.json();
         if (!realtimeResult.success) throw new Error(realtimeResult.error?.message || '创建实时语音链路失败');
         setRealtimeSessionId(realtimeResult.data.realtimeSession.id);
-        setRealtimeFallbackMode(Boolean(realtimeResult.data.realtimeSession.fallbackMode));
+        const nextFallbackMode = Boolean(realtimeResult.data.realtimeSession.fallbackMode);
+        setRealtimeFallbackMode(nextFallbackMode);
+        if (!nextFallbackMode) startRealtimeOutputPolling();
         const providerReason = realtimeResult.data.providerConnection?.reason;
         setNotice(providerReason
           ? `实时语音链路已建立服务端会话：${providerReason}`

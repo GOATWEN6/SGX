@@ -17,6 +17,15 @@
 | `DOUBAO_REALTIME_APP_KEY` | 是 | 不写入仓库 | 对应上游 header `X-Api-App-Key`。 |
 | `DOUBAO_REALTIME_RESOURCE_ID` | 否 | `volc.speech.dialog` | 对应上游 header `X-Api-Resource-Id`。 |
 | `DOUBAO_REALTIME_MODEL` | 否 | 供应商控制台模型名 | 记录当前使用的 realtime 语音模型，便于日志和 smoke 判断。 |
+| `DOUBAO_REALTIME_VOICE` | 否 | `zh_female_cancan` | 输出音色。不同控制台可能有不同可用音色，真实联调时以火山控制台为准。 |
+| `DOUBAO_REALTIME_SYSTEM_PROMPT` | 否 | 内置银发助手提示词 | realtime session 的系统提示词。不要写入隐私数据或密钥。 |
+| `DOUBAO_REALTIME_INPUT_AUDIO_FORMAT` | 否 | `opus` | 发送给上游的输入音频格式声明。当前浏览器采集为 `audio/webm;codecs=opus`，真实验收时要确认上游是否接受该容器或需要改成 PCM/AudioWorklet。 |
+| `DOUBAO_REALTIME_OUTPUT_AUDIO_FORMAT` | 否 | `ogg_opus` | 期望上游返回的音频格式。页面按该格式生成播放队列。 |
+| `DOUBAO_REALTIME_OUTPUT_SAMPLE_RATE` | 否 | `24000` | 输出音频采样率。 |
+| `DOUBAO_REALTIME_TEMPERATURE` | 否 | `0.4` | 对话生成温度，MVP 取偏稳妥，避免陪伴场景发散。 |
+| `DOUBAO_REALTIME_MAX_TOKENS` | 否 | `512` | 单轮回复最大文本 token。语音场景不宜过长。 |
+| `DOUBAO_REALTIME_FRAME_COMPRESSION` | 否 | `gzip` | Doubao 二进制协议 payload 压缩方式；如官方联调要求无压缩，设为 `none`。 |
+| `DOUBAO_REALTIME_SESSION_PARAMS_JSON` | 否 | 不建议默认填 | 上游 StartSession payload 的覆盖参数。用于官方协议字段和当前默认 payload 不一致时快速联调，不提交真实值。 |
 | `DOUBAO_REALTIME_CONNECT_TIMEOUT_MS` | 否 | `3500` | 服务端连接上游 WebSocket 的超时时间。 |
 
 兼容别名：
@@ -30,12 +39,11 @@
 
 ## 保护开关
 
-以下变量默认不启用，只有在官方二进制协议编解码完成并经过 provider smoke 后才允许打开。
+以下变量默认不启用，只有在官方二进制协议编解码和真实 provider smoke 验证后才允许打开。
 
 | 变量 | 默认 | 含义 |
 |---|---|---|
-| `DOUBAO_REALTIME_FORWARD_RAW_AUDIO` | `false` | 是否把浏览器上传的音频 chunk 原样转发给上游 WebSocket。默认关闭，避免误发错误协议帧。 |
-| `DOUBAO_REALTIME_FORWARD_JSON_EVENTS` | `false` | 是否向上游发送 JSON 控制帧。默认关闭，避免把非官方协议当成 interrupt/cancel。 |
+| `DOUBAO_REALTIME_FORWARD_BINARY_PROTOCOL` | `false` | 是否真正发送 Doubao 二进制协议帧，包括 `StartConnection`、`StartSession`、`TaskRequest`、`ClientInterrupt`。默认关闭，避免未联调成功前误消耗上游资源。 |
 
 ## 当前验收边界
 
@@ -45,11 +53,12 @@
 - 前端把音频 chunk 发送到 `/api/voice/realtime`。
 - 服务端创建 realtime session，保管 provider 凭证。
 - 服务端能构造火山官方 header，并具备带自定义 header 的上游 WebSocket 握手能力。
+- 服务端已新增 Doubao 二进制协议 codec/translator，并在保护开关打开时发送 `StartConnection`、`StartSession`、`TaskRequest`、`ClientInterrupt`。
+- 页面已新增 provider 音频/文本增量轮询，把服务端收到的 audio delta 放入播放队列，并把 transcript delta 用于大字幕。
 - 打断会清理本地播放队列并进入服务端 realtime interrupt。
 
 当前仍未宣称完成：
 
-- Doubao 二进制协议帧编解码。
-- `StartConnection` / `StartSession` / `TaskRequest` / `ClientInterrupt` 的官方帧发送。
-- provider audio delta 的真实播放。
+- 官方真实 provider smoke。也就是在你的火山环境里确认 StartSession payload、音频容器、返回音频格式完全匹配。
+- provider audio delta 的真实播放质量和延迟。
 - 真实 10 轮电话式对话验收。
