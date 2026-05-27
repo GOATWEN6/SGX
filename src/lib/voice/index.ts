@@ -6,6 +6,7 @@ import {
   updateVoiceSessionRecord,
 } from '@/lib/db';
 import { VoiceSessionRecord, VoiceState } from '@/types';
+import { isDoubaoRealtimeProviderConfigured } from './realtime/doubao-provider';
 
 export interface AudioChunk {
   data: string;
@@ -34,12 +35,8 @@ export interface RealtimeVoiceProvider {
 }
 
 export function isDoubaoRealtimeConfigured(): boolean {
-  return Boolean(
-    process.env.DOUBAO_REALTIME_ENABLED === 'true'
-    && process.env.DOUBAO_REALTIME_API_KEY
-    && process.env.DOUBAO_REALTIME_ENDPOINT
-    && process.env.DOUBAO_REALTIME_MODEL
-  );
+  if (process.env.DOUBAO_REALTIME_ENABLED !== 'true') return false;
+  return isDoubaoRealtimeProviderConfigured();
 }
 
 export async function createDoubaoVoiceSession(input: VoiceSessionConfig): Promise<VoiceSessionRecord> {

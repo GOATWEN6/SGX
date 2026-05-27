@@ -81,7 +81,12 @@
     "src/lib/voice/realtime/types.ts",
     "src/lib/voice/realtime/state-machine.ts",
     "src/lib/voice/realtime/session-store.ts",
+    "src/lib/voice/realtime/doubao-config.ts",
+    "src/lib/voice/realtime/doubao-provider.ts",
+    "src/lib/voice/realtime/header-websocket.ts",
     "src/app/api/voice/realtime/route.ts",
+    "src/app/voice-assistant/page.tsx#MediaRecorder",
+    "docs/config/voice-assistant-env.md",
     "scripts/voice-realtime-smoke.mjs",
     "package.json#test:voice:realtime"
   ]

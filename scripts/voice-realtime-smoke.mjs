@@ -19,15 +19,23 @@ async function runStaticContractChecks() {
     typesSource,
     stateMachineSource,
     sessionStoreSource,
+    doubaoConfigSource,
+    doubaoProviderSource,
+    headerWebSocketSource,
     voiceIndexSource,
     realtimeRouteSource,
+    voiceAssistantPageSource,
     stateMachineCasesSource,
   ] = await Promise.all([
     readText('src/lib/voice/realtime/types.ts'),
     readText('src/lib/voice/realtime/state-machine.ts'),
     readText('src/lib/voice/realtime/session-store.ts'),
+    readText('src/lib/voice/realtime/doubao-config.ts'),
+    readText('src/lib/voice/realtime/doubao-provider.ts'),
+    readText('src/lib/voice/realtime/header-websocket.ts'),
     readText('src/lib/voice/index.ts'),
     readText('src/app/api/voice/realtime/route.ts'),
+    readText('src/app/voice-assistant/page.tsx'),
     readText('harness/voice-assistant/state-machine-cases.json'),
   ]);
 
@@ -61,6 +69,15 @@ async function runStaticContractChecks() {
   expect(realtimeRouteSource.includes("action === 'interrupt'"), 'realtime route accepts interrupt action');
   expect(realtimeRouteSource.includes('isDoubaoRealtimeConfigured'), 'realtime route keeps provider config on server');
   expect(!realtimeRouteSource.includes('process.env.DOUBAO_REALTIME_API_KEY,'), 'realtime route does not return provider key');
+  expect(doubaoConfigSource.includes('X-Api-App-ID'), 'Doubao config builds official app id header');
+  expect(doubaoConfigSource.includes('X-Api-Access-Key'), 'Doubao config builds official access key header');
+  expect(doubaoConfigSource.includes('X-Api-Resource-Id'), 'Doubao config builds official resource id header');
+  expect(doubaoConfigSource.includes('volc.speech.dialog'), 'Doubao config defaults to realtime dialogue resource');
+  expect(doubaoProviderSource.includes('raw_audio_forward_disabled_until_binary_codec_is_verified'), 'Doubao provider blocks raw forwarding until codec is verified');
+  expect(headerWebSocketSource.includes('Sec-WebSocket-Key'), 'server-side WebSocket supports custom provider headers');
+  expect(voiceAssistantPageSource.includes('MediaRecorder'), 'voice assistant page captures browser audio chunks');
+  expect(voiceAssistantPageSource.includes("action: 'append_audio'"), 'voice assistant page sends realtime append_audio');
+  expect(voiceAssistantPageSource.includes('clearRealtimePlayback'), 'voice assistant clears realtime playback on interrupt/end');
 }
 
 function runProviderReadinessChecks() {
@@ -92,7 +109,7 @@ function printReport() {
     failed,
     total: results.length,
     results,
-    limitation: 'This smoke test proves local realtime contracts and provider readiness only. It does not prove real audio streaming until a provider spike is connected.',
+    limitation: 'This smoke test proves local realtime contracts, browser chunk capture wiring, and provider header boundaries. It does not prove upstream Doubao binary dialogue frames until the official codec is implemented.',
   }, null, 2));
   if (failed > 0) process.exitCode = 1;
 }

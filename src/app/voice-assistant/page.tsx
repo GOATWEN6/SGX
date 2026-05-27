@@ -20,6 +20,20 @@ interface MemoryCandidateLite {
   status: string;
 }
 
+interface RealtimeAudioDelta {
+  base64Audio: string;
+  mimeType: string;
+}
+
+interface RealtimeAppendResponse {
+  audioDeltas?: RealtimeAudioDelta[];
+  providerForward?: {
+    providerConnected: boolean;
+    forwarded: boolean;
+    reason?: string;
+  };
+}
+
 const stateLabel: Record<VoiceState, string> = {
   booting: '正在准备',
   idle: '可以开始',
@@ -57,10 +71,31 @@ async function ensureTestUser(): Promise<string> {
   return result.data.user.id;
 }
 
+async function blobToBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return window.btoa(binary);
+}
+
+function base64ToBlob(base64Audio: string, mimeType: string): Blob {
+  const binary = window.atob(base64Audio);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return new Blob([bytes], { type: mimeType });
+}
+
 export default function VoiceAssistantPage() {
   const [voiceState, setVoiceState] = useState<VoiceState>('booting');
   const [conversationSessionId, setConversationSessionId] = useState<string | null>(null);
   const [voiceSessionId, setVoiceSessionId] = useState<string | null>(null);
+  const [realtimeSessionId, setRealtimeSessionId] = useState<string | null>(null);
+  const [realtimeFallbackMode, setRealtimeFallbackMode] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [notice, setNotice] = useState('');
@@ -72,6 +107,8 @@ export default function VoiceAssistantPage() {
   const voiceStateRef = useRef<VoiceState>('booting');
   const isSpeakingRef = useRef(false);
   const voiceSessionIdRef = useRef<string | null>(null);
+  const realtimeSessionIdRef = useRef<string | null>(null);
+  const realtimeFallbackModeRef = useRef(true);
   const callActiveRef = useRef(false);
   const sentFinalRef = useRef(false);
   const messageAbortRef = useRef<AbortController | null>(null);
@@ -81,6 +118,15 @@ export default function VoiceAssistantPage() {
   const vadAnalyserRef = useRef<AnalyserNode | null>(null);
   const vadIntervalRef = useRef<number | null>(null);
   const vadHitCountRef = useRef(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const realtimeStreamRef = useRef<MediaStream | null>(null);
+  const realtimeChunkSequenceRef = useRef(0);
+  const realtimeMimeTypeRef = useRef('audio/webm');
+  const lastProviderForwardReasonRef = useRef('');
+  const audioQueueRef = useRef<RealtimeAudioDelta[]>([]);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const currentAudioUrlRef = useRef<string | null>(null);
+  const isRealtimeAudioPlayingRef = useRef(false);
 
   useEffect(() => {
     voiceStateRef.current = voiceState;
@@ -93,6 +139,14 @@ export default function VoiceAssistantPage() {
   useEffect(() => {
     voiceSessionIdRef.current = voiceSessionId;
   }, [voiceSessionId]);
+
+  useEffect(() => {
+    realtimeSessionIdRef.current = realtimeSessionId;
+  }, [realtimeSessionId]);
+
+  useEffect(() => {
+    realtimeFallbackModeRef.current = realtimeFallbackMode;
+  }, [realtimeFallbackMode]);
 
   const stopBargeInMonitor = () => {
     if (vadIntervalRef.current !== null) {
@@ -111,12 +165,21 @@ export default function VoiceAssistantPage() {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
+    clearRealtimePlayback();
     setIsSpeaking(false);
   };
 
   const interruptSpeech = async (reason: 'user_speech' | 'manual_stop' = 'manual_stop') => {
     stopSpeakingNow();
     setVoiceState('interrupted');
+    const activeRealtimeSessionId = realtimeSessionIdRef.current;
+    if (activeRealtimeSessionId && !realtimeFallbackModeRef.current) {
+      await authenticatedFetch('/api/voice/realtime', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'interrupt', realtimeSessionId: activeRealtimeSessionId, reason }),
+      }).catch(() => {});
+    }
     const activeVoiceSessionId = voiceSessionIdRef.current;
     if (activeVoiceSessionId) {
       await authenticatedFetch('/api/voice/session/interrupt', {
@@ -134,6 +197,169 @@ export default function VoiceAssistantPage() {
       }
       interruptTimeoutRef.current = null;
     }, 300);
+  };
+
+  function clearRealtimePlayback() {
+    audioQueueRef.current = [];
+    isRealtimeAudioPlayingRef.current = false;
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current.removeAttribute('src');
+      currentAudioRef.current.load();
+      currentAudioRef.current = null;
+    }
+    if (currentAudioUrlRef.current) {
+      URL.revokeObjectURL(currentAudioUrlRef.current);
+      currentAudioUrlRef.current = null;
+    }
+  }
+
+  const playNextRealtimeAudio = () => {
+    if (isRealtimeAudioPlayingRef.current || audioQueueRef.current.length === 0 || !callActiveRef.current) return;
+    const next = audioQueueRef.current.shift();
+    if (!next) return;
+
+    const blob = base64ToBlob(next.base64Audio, next.mimeType);
+    const objectUrl = URL.createObjectURL(blob);
+    const audio = new Audio(objectUrl);
+    currentAudioRef.current = audio;
+    currentAudioUrlRef.current = objectUrl;
+    isRealtimeAudioPlayingRef.current = true;
+    setIsSpeaking(true);
+    setVoiceState('speaking');
+
+    const cleanup = () => {
+      isRealtimeAudioPlayingRef.current = false;
+      setIsSpeaking(false);
+      URL.revokeObjectURL(objectUrl);
+      if (currentAudioRef.current === audio) currentAudioRef.current = null;
+      if (currentAudioUrlRef.current === objectUrl) currentAudioUrlRef.current = null;
+      if (callActiveRef.current && audioQueueRef.current.length > 0) {
+        playNextRealtimeAudio();
+      } else if (callActiveRef.current && voiceStateRef.current === 'speaking') {
+        setVoiceState('listening');
+      }
+    };
+
+    audio.onended = cleanup;
+    audio.onerror = () => {
+      cleanup();
+      setNotice('实时音频播放失败了，可以先看大字幕或切回文字测试。');
+    };
+    void audio.play().catch(() => {
+      cleanup();
+      setNotice('浏览器阻止了实时音频播放，请先点击页面后重试。');
+    });
+  };
+
+  const enqueueRealtimeAudio = (deltas?: RealtimeAudioDelta[]) => {
+    if (!deltas?.length) return;
+    audioQueueRef.current.push(...deltas);
+    playNextRealtimeAudio();
+  };
+
+  const appendRealtimeAudioChunk = async (blob: Blob) => {
+    const activeRealtimeSessionId = realtimeSessionIdRef.current;
+    if (!activeRealtimeSessionId) return;
+
+    const base64Audio = await blobToBase64(blob);
+    const response = await authenticatedFetch('/api/voice/realtime', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'append_audio',
+        realtimeSessionId: activeRealtimeSessionId,
+        chunk: {
+          sequence: realtimeChunkSequenceRef.current,
+          base64Audio,
+          format: {
+            codec: realtimeMimeTypeRef.current.includes('opus') ? 'opus' : 'webm',
+            sampleRate: 48000,
+            channels: 1,
+          },
+          durationMs: 250,
+          capturedAt: new Date().toISOString(),
+        },
+      }),
+    });
+    realtimeChunkSequenceRef.current += 1;
+    const result = await response.json() as { success: boolean; data?: RealtimeAppendResponse; error?: { message?: string } };
+    if (!result.success) throw new Error(result.error?.message || '实时音频上传失败');
+
+    const reason = result.data?.providerForward?.reason || '';
+    if (reason && reason !== lastProviderForwardReasonRef.current) {
+      lastProviderForwardReasonRef.current = reason;
+      if (reason.includes('binary_codec') || reason.includes('raw_audio_forward_disabled')) {
+        setNotice('音频已经进入服务端 realtime 链路；Doubao 二进制协议转发仍处于保护模式，避免误发错误协议帧。');
+      }
+    }
+    enqueueRealtimeAudio(result.data?.audioDeltas);
+  };
+
+  const commitRealtimeTurn = async () => {
+    const activeRealtimeSessionId = realtimeSessionIdRef.current;
+    if (!activeRealtimeSessionId) return;
+    await authenticatedFetch('/api/voice/realtime', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'commit_turn', realtimeSessionId: activeRealtimeSessionId }),
+    }).catch(() => {});
+  };
+
+  const stopRealtimeCapture = async (commitTurn = true) => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    mediaRecorderRef.current = null;
+    realtimeStreamRef.current?.getTracks().forEach(track => track.stop());
+    realtimeStreamRef.current = null;
+    setIsRecording(false);
+    if (voiceStateRef.current === 'listening') setVoiceState('idle');
+    if (commitTurn) await commitRealtimeTurn();
+  };
+
+  const startRealtimeCapture = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setNotice('当前浏览器不能采集实时音频，请先用文字或浏览器语音识别测试。');
+      return;
+    }
+    if (mediaRecorderRef.current?.state === 'recording') {
+      await stopRealtimeCapture(true);
+      return;
+    }
+    if (isSpeakingRef.current) await interruptSpeech('user_speech');
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    const preferredMimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : 'audio/webm';
+    realtimeMimeTypeRef.current = preferredMimeType;
+    realtimeStreamRef.current = stream;
+    const recorder = new MediaRecorder(stream, { mimeType: preferredMimeType });
+    mediaRecorderRef.current = recorder;
+    realtimeChunkSequenceRef.current = 0;
+    lastProviderForwardReasonRef.current = '';
+
+    recorder.ondataavailable = event => {
+      if (event.data.size <= 0 || !callActiveRef.current) return;
+      appendRealtimeAudioChunk(event.data).catch(error => {
+        setVoiceState('error');
+        setNotice(error instanceof Error ? error.message : '实时音频上传失败。');
+      });
+    };
+    recorder.onerror = () => {
+      setVoiceState('error');
+      setNotice('实时录音失败了，可以切回文字或刷新重试。');
+    };
+    recorder.onstop = () => {
+      setIsRecording(false);
+    };
+    recorder.start(250);
+    setIsRecording(true);
+    setVoiceState('listening');
+    setNotice('正在把麦克风音频切片发送到服务端 realtime 链路。');
   };
 
   const startBargeInMonitor = async () => {
@@ -236,7 +462,27 @@ export default function VoiceAssistantPage() {
       callActiveRef.current = true;
 
       if (voiceResult.data.voiceSession.fallbackMode) {
+        setRealtimeFallbackMode(true);
         setNotice('当前是浏览器 ASR/TTS 测试模式，不是真实豆包实时语音流。');
+      } else {
+        const realtimeResponse = await authenticatedFetch('/api/voice/realtime', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'create',
+            conversationSessionId: nextConversationId,
+            connectProvider: true,
+            inputFormat: { codec: 'webm', sampleRate: 48000, channels: 1 },
+          }),
+        });
+        const realtimeResult = await realtimeResponse.json();
+        if (!realtimeResult.success) throw new Error(realtimeResult.error?.message || '创建实时语音链路失败');
+        setRealtimeSessionId(realtimeResult.data.realtimeSession.id);
+        setRealtimeFallbackMode(Boolean(realtimeResult.data.realtimeSession.fallbackMode));
+        const providerReason = realtimeResult.data.providerConnection?.reason;
+        setNotice(providerReason
+          ? `实时语音链路已建立服务端会话：${providerReason}`
+          : '实时语音链路已建立，点击开始说话会发送音频 chunk 到服务端。');
       }
 
       const greeting = '您好，我是这个页面里的 AI 语音助手。您可以直接说话，也可以打字测试。';
@@ -263,6 +509,8 @@ export default function VoiceAssistantPage() {
       recognitionRef.current?.abort?.();
       stopSpeakingNow();
       stopBargeInMonitor();
+      stopRealtimeCapture(false).catch(() => {});
+      clearRealtimePlayback();
     };
     // The standalone test call should boot exactly once per page entry.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -307,6 +555,13 @@ export default function VoiceAssistantPage() {
   };
 
   const startListening = () => {
+    if (realtimeSessionIdRef.current && !realtimeFallbackModeRef.current) {
+      startRealtimeCapture().catch(error => {
+        setVoiceState('error');
+        setNotice(error instanceof Error ? error.message : '实时语音采集失败。');
+      });
+      return;
+    }
     if (!recognitionRef.current) {
       setNotice('当前浏览器不支持语音识别，请先用文字输入测试。');
       return;
@@ -361,6 +616,18 @@ export default function VoiceAssistantPage() {
     recognitionRef.current?.abort?.();
     stopSpeakingNow();
     stopBargeInMonitor();
+    await stopRealtimeCapture(false);
+    clearRealtimePlayback();
+    const activeRealtimeSessionId = realtimeSessionIdRef.current;
+    if (activeRealtimeSessionId) {
+      await authenticatedFetch('/api/voice/realtime', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'close', realtimeSessionId: activeRealtimeSessionId }),
+      }).catch(() => {});
+      setRealtimeSessionId(null);
+      setRealtimeFallbackMode(true);
+    }
     if (conversationSessionId) {
       await authenticatedFetch('/api/conversation/session/end', {
         method: 'POST',

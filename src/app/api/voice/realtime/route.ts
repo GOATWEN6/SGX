@@ -5,9 +5,14 @@ import { isDoubaoRealtimeConfigured } from '@/lib/voice';
 import {
   appendRealtimeAudioChunk,
   closeRealtimeVoiceSession,
+  closeDoubaoRealtimeRuntime,
+  connectDoubaoRealtimeRuntime,
+  forwardDoubaoAudioChunk,
   createRealtimeVoiceSession,
   getRealtimeVoiceSession,
+  getRealtimeProviderEvents,
   interruptRealtimeVoiceSession,
+  interruptDoubaoRealtimeRuntime,
   RealtimeAudioChunk,
   RealtimeVoiceEvent,
   toLegacyVoiceState,
@@ -84,6 +89,7 @@ function toResponseData(session: NonNullable<ReturnType<typeof getRealtimeVoiceS
   return {
     realtimeSession: session,
     legacyState: toLegacyVoiceState(session.state),
+    providerEvents: getRealtimeProviderEvents(session.id),
   };
 }
 
@@ -141,7 +147,11 @@ export async function POST(request: NextRequest) {
         fallbackMode: !providerConfigured,
         inputFormat: body.inputFormat,
       });
-      return NextResponse.json({ success: true, data: toResponseData(session) });
+      const providerConnection = body.connectProvider === false
+        ? undefined
+        : await connectDoubaoRealtimeRuntime(session.id);
+      const current = getRealtimeVoiceSession(session.id) || session;
+      return NextResponse.json({ success: true, data: { ...toResponseData(current), providerConnection } });
     }
 
     const owned = assertOwnedSession(body.realtimeSessionId, userId);
@@ -161,7 +171,9 @@ export async function POST(request: NextRequest) {
         );
       }
       const { session, transition } = appendRealtimeAudioChunk(owned.session.id, chunk);
-      return NextResponse.json({ success: true, data: { ...toResponseData(session!), transition } });
+      const providerForward = await forwardDoubaoAudioChunk(owned.session.id, chunk);
+      const current = getRealtimeVoiceSession(owned.session.id) || session!;
+      return NextResponse.json({ success: true, data: { ...toResponseData(current), transition, providerForward } });
     }
 
     if (action === 'interrupt') {
@@ -173,12 +185,14 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
-      return NextResponse.json({ success: true, data: { ...toResponseData(session!), transition } });
+      const providerInterrupt = await interruptDoubaoRealtimeRuntime(owned.session.id, reason);
+      return NextResponse.json({ success: true, data: { ...toResponseData(session!), transition, providerInterrupt } });
     }
 
     if (action === 'close') {
+      const providerClose = closeDoubaoRealtimeRuntime(owned.session.id);
       const session = closeRealtimeVoiceSession(owned.session.id);
-      return NextResponse.json({ success: true, data: toResponseData(session!) });
+      return NextResponse.json({ success: true, data: { ...toResponseData(session!), providerClose } });
     }
 
     const event = actionToEvent[action];
