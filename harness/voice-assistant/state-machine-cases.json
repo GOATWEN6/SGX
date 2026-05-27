@@ -1,0 +1,115 @@
+{
+  "updatedAt": "2026-05-27",
+  "states": [
+    "idle",
+    "connecting",
+    "listening",
+    "user_speaking",
+    "thinking",
+    "assistant_speaking",
+    "interrupted",
+    "recovering",
+    "error",
+    "ended"
+  ],
+  "validTransitions": [
+    {
+      "from": "idle",
+      "to": "connecting",
+      "event": "start_call"
+    },
+    {
+      "from": "connecting",
+      "to": "listening",
+      "event": "provider_session_ready"
+    },
+    {
+      "from": "connecting",
+      "to": "error",
+      "event": "mic_denied_or_provider_failed"
+    },
+    {
+      "from": "listening",
+      "to": "user_speaking",
+      "event": "vad_speech_start_or_transcript_delta"
+    },
+    {
+      "from": "user_speaking",
+      "to": "thinking",
+      "event": "turn_committed"
+    },
+    {
+      "from": "thinking",
+      "to": "assistant_speaking",
+      "event": "audio_delta_or_response_start"
+    },
+    {
+      "from": "assistant_speaking",
+      "to": "interrupted",
+      "event": "user_speech_or_manual_interrupt"
+    },
+    {
+      "from": "interrupted",
+      "to": "listening",
+      "event": "provider_cancel_ack_or_stale_guard_active"
+    },
+    {
+      "from": "assistant_speaking",
+      "to": "listening",
+      "event": "assistant_turn_complete"
+    },
+    {
+      "from": "listening",
+      "to": "ended",
+      "event": "end_call"
+    },
+    {
+      "from": "thinking",
+      "to": "recovering",
+      "event": "provider_timeout"
+    },
+    {
+      "from": "assistant_speaking",
+      "to": "recovering",
+      "event": "playback_error"
+    },
+    {
+      "from": "recovering",
+      "to": "listening",
+      "event": "retry_success"
+    },
+    {
+      "from": "recovering",
+      "to": "error",
+      "event": "retry_failed"
+    },
+    {
+      "from": "error",
+      "to": "idle",
+      "event": "reset"
+    }
+  ],
+  "invalidTransitionChecks": [
+    {
+      "from": "idle",
+      "to": "assistant_speaking",
+      "whyInvalid": "No provider session or user turn exists."
+    },
+    {
+      "from": "assistant_speaking",
+      "to": "thinking",
+      "whyInvalid": "Assistant playback cannot start a new LLM turn without an interrupt or completion."
+    },
+    {
+      "from": "error",
+      "to": "assistant_speaking",
+      "whyInvalid": "Error recovery must pass through idle/recovering/listening."
+    },
+    {
+      "from": "ended",
+      "to": "assistant_speaking",
+      "whyInvalid": "Ended sessions cannot receive stale provider output."
+    }
+  ],
+  "completionRule": "A state is only considered real when both UI state and runtime/provider state agree, or stale provider output is explicitly rejected."
+}

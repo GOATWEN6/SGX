@@ -1,0 +1,79 @@
+{
+  "updatedAt": "2026-05-27",
+  "stage": "Sprint 0A",
+  "focus": "multi-agent harness and realtime voice readiness",
+  "overallStatus": "in_progress",
+  "currentBranch": "codex-voice-chat-standalone",
+  "truthSource": [
+    "银发AI相框-PRD:MVP.md",
+    "docs/planning/conversation-core-mvp-task-breakdown.md",
+    "docs/planning/voice-assistant-realtime-next-phase-plan.md"
+  ],
+  "gates": [
+    {
+      "id": "plan_gate",
+      "name": "Plan Gate",
+      "status": "in_progress",
+      "requiredEvidence": [
+        "AGENTS.md multi-agent scale policy",
+        "next-round execution plan",
+        "scope and not-now list"
+      ]
+    },
+    {
+      "id": "source_gate",
+      "name": "Source Gate",
+      "status": "planned",
+      "requiredEvidence": [
+        "docs/research/realtime-voice-open-source-evaluation.md",
+        "harness/voice-assistant/source-lock.json",
+        "license review before code copy"
+      ]
+    },
+    {
+      "id": "design_gate",
+      "name": "Design Gate",
+      "status": "planned",
+      "requiredEvidence": [
+        "state-machine-cases.json",
+        "realtime provider contract",
+        "memory confirmation contract"
+      ]
+    },
+    {
+      "id": "implementation_gate",
+      "name": "Implementation Gate",
+      "status": "not_started",
+      "requiredEvidence": [
+        "server-side realtime proxy spike",
+        "browser audio chunk capture",
+        "audio delta playback queue",
+        "provider interrupt propagation"
+      ]
+    },
+    {
+      "id": "evaluation_gate",
+      "name": "Evaluation Gate",
+      "status": "not_started",
+      "requiredEvidence": [
+        "10-turn manual run log",
+        "10 interruption attempts with at least 9 successes",
+        "provider failure recovery evidence",
+        "secret audit"
+      ]
+    }
+  ],
+  "knownGaps": [
+    "Current voice experience is browser ASR/TTS fallback, not true realtime provider audio.",
+    "Interrupt currently stops local playback only; provider cancel is not proven.",
+    "Text model activation must be smoke tested before judging assistant quality.",
+    "Web search has framework shape but lacks production search provider evidence.",
+    "Sensitive memory confirmation needs stronger regression coverage."
+  ],
+  "nextActions": [
+    "Run Source Gate reproductions for Volcengine RTC AIGC Demo, LiveKit Agents, and Pipecat.",
+    "Write realtime provider contract tests before implementing proxy.",
+    "Build server-side realtime proxy skeleton that never exposes provider keys to the browser.",
+    "Add state-machine tests and manual interruption evidence."
+  ]
+}

@@ -1,0 +1,133 @@
+{
+  "updatedAt": "2026-05-27",
+  "sourceOfTruth": [
+    "银发AI相框-PRD:MVP.md",
+    "docs/planning/conversation-core-mvp-task-breakdown.md",
+    "docs/planning/voice-assistant-realtime-next-phase-plan.md"
+  ],
+  "scope": "PRD 模块 D：老人端 AI 语音对话基础能力",
+  "requirements": [
+    {
+      "id": "D1.1",
+      "title": "AI聊天入口、语音唤醒与麦克风授权",
+      "userVisibleBehavior": "老人从相框入口进入 AI 聊天页，点击大按钮或前台唤醒后开始说话；麦克风拒绝时有清晰提示和返回路径。",
+      "currentStatus": "partial_demo",
+      "currentEvidence": [
+        "src/app/voice-assistant/page.tsx",
+        "src/app/page.tsx"
+      ],
+      "nextEvidenceRequired": [
+        "相框入口到 /voice-assistant 的人工验收记录",
+        "麦克风授权成功和拒绝两条场景记录"
+      ],
+      "notDoneUntil": "真实浏览器中可重复进入、授权失败不进入假 listening 状态。"
+    },
+    {
+      "id": "D1.2",
+      "title": "语音输入与 ASR",
+      "userVisibleBehavior": "老人说普通话后，系统持续识别并进入下一轮对话。",
+      "currentStatus": "demo_fallback_only",
+      "currentEvidence": [
+        "browser SpeechRecognition fallback"
+      ],
+      "nextEvidenceRequired": [
+        "浏览器音频 chunk 进入 server-side realtime proxy",
+        "provider 返回 transcript delta 或 turn transcript"
+      ],
+      "notDoneUntil": "不能只依赖 Web Speech API；必须证明音频流走后端 provider 链路。"
+    },
+    {
+      "id": "D1.3",
+      "title": "AI 回复生成与联网查询",
+      "userVisibleBehavior": "AI 能生成短句、温和回复；天气、新闻、节日等需要最新信息时走工具并带来源。",
+      "currentStatus": "partial_text",
+      "currentEvidence": [
+        "src/lib/conversation/index.ts",
+        "src/lib/tools/index.ts"
+      ],
+      "nextEvidenceRequired": [
+        "Ark 文本模型真实可用 smoke",
+        "Tool Broker 带来源的联网 smoke"
+      ],
+      "notDoneUntil": "fallback 文案不能被当成真实模型；联网必须有来源和审计记录。"
+    },
+    {
+      "id": "D1.4",
+      "title": "TTS 播报、大字幕与状态反馈",
+      "userVisibleBehavior": "AI 回复用语音读出，同时页面显示大字幕和清晰状态。",
+      "currentStatus": "demo_fallback_only",
+      "currentEvidence": [
+        "browser speechSynthesis fallback",
+        "src/app/voice-assistant/page.tsx"
+      ],
+      "nextEvidenceRequired": [
+        "provider audio delta 播放队列记录",
+        "状态迁移日志",
+        "字幕停止和恢复验收"
+      ],
+      "notDoneUntil": "不能只用浏览器 TTS；必须播放 provider 或后端返回的流式音频。"
+    },
+    {
+      "id": "D1.5",
+      "title": "打断与连续对话",
+      "userVisibleBehavior": "AI 正在说时，老人开口或点击打断，旧声音停止，新输入进入下一轮。",
+      "currentStatus": "local_demo_only",
+      "currentEvidence": [
+        "local VAD stops browser TTS"
+      ],
+      "nextEvidenceRequired": [
+        "client runtime interrupt event",
+        "server proxy cancel/interrupt event",
+        "provider cancel/interrupt acknowledgement or stale-response suppression",
+        "10 次插话至少 9 次成功记录"
+      ],
+      "notDoneUntil": "只停本地播放不算完成；旧 provider response 不得继续写入字幕或记忆。"
+    },
+    {
+      "id": "D1.6",
+      "title": "老人友好型对话策略",
+      "userVisibleBehavior": "AI 回复短、慢、清楚、低压力，不像客服、医生或销售。",
+      "currentStatus": "partial_prompt",
+      "currentEvidence": [
+        "src/lib/conversation/index.ts"
+      ],
+      "nextEvidenceRequired": [
+        "老人友好回复回归集",
+        "10 轮真实对话人工评分"
+      ],
+      "notDoneUntil": "回归集中不出现连续盘问、假扮家人、诊断开药或销售式话术。"
+    },
+    {
+      "id": "D1.7",
+      "title": "基础记忆与上下文使用",
+      "userVisibleBehavior": "AI 记得老人确认过的基础信息、家庭成员、偏好和禁忌话题。",
+      "currentStatus": "partial_structured_memory",
+      "currentEvidence": [
+        "src/lib/memory/index.ts",
+        "src/app/api/memory/candidates/[id]/confirm/route.ts",
+        "src/app/api/memory/candidates/[id]/reject/route.ts"
+      ],
+      "nextEvidenceRequired": [
+        "敏感记忆 pending confirmation 用例",
+        "拒绝后不得再注入 prompt 的用例",
+        "记忆来源 evidenceText 检查"
+      ],
+      "notDoneUntil": "健康、家庭冲突、财务、禁忌话题未确认不得进入长期记忆。"
+    },
+    {
+      "id": "D1.8",
+      "title": "提示词与 Agent 基础编排",
+      "userVisibleBehavior": "用户只感受到一个 AI，但内部有陪伴回答、记忆、联网、安全和回复整理职责。",
+      "currentStatus": "planned",
+      "currentEvidence": [
+        "docs/planning/conversation-core-mvp-task-breakdown.md"
+      ],
+      "nextEvidenceRequired": [
+        "prompt registry",
+        "ConversationAgent / MemoryAgent / SafetyAgent / ToolBroker 输入输出定义",
+        "固定 JSON response schema"
+      ],
+      "notDoneUntil": "不再把全部逻辑塞进一个大 prompt 或依赖 suggestedCards 作为记忆来源。"
+    }
+  ]
+}

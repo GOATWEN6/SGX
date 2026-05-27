@@ -10,6 +10,20 @@
 
 ---
 
+## 0. 本计划继承的基础对话原则
+
+本计划吸收 `docs/planning/conversation-core-mvp-task-breakdown.md` 的结论，并把下一阶段收敛到一个目标：先打通老人端 AI 语音对话底座，不把回忆录、家庭互动、订阅、游戏化和后台管理塞进主链路。
+
+下一阶段必须坚持：
+
+- 先让“老人像打电话一样和 AI 连续说话”成立。
+- Web Speech API 只能作为 Demo fallback，不能作为 realtime voice 主验收。
+- 智能打断必须同时停止本地播放、取消 provider 旧响应、阻止旧字幕继续更新。
+- 敏感记忆、健康、家庭矛盾、财务、禁忌话题必须经过老人确认。
+- 联网只能走 Tool Broker，网页内容永远是不可信外部资料。
+- 语音唤醒只做前台网页尝试，不承诺浏览器关闭后的后台常驻监听。
+- Agent 编排先做轻量职责拆分和 prompt 管理，不急着引入重型框架。
+
 ## 1. PRD Traceability
 
 | PRD 来源 | 必须满足的用户行为 | 下一阶段验收口径 |
@@ -51,7 +65,38 @@
 
 ## 4. Sprint Plan
 
-### Sprint 0: 对齐、选型、环境可用
+### Sprint 0A: Multi-Agent Harness And Conversation Design
+
+**目标：** 先把下一轮协作方式、验收口径和基础对话设计写成可重复执行的工程资产，再进入 provider spike。
+
+**Files:**
+- Modify: `AGENTS.md`
+- Create: `docs/research/realtime-voice-open-source-evaluation.md`
+- Create: `harness/voice-assistant/prd-traceability.json`
+- Create: `harness/voice-assistant/progress.json`
+- Create: `harness/voice-assistant/source-lock.json`
+- Create: `harness/voice-assistant/e2e-scenarios.json`
+- Create: `harness/voice-assistant/state-machine-cases.json`
+- Create: `harness/voice-assistant/manual-acceptance.md`
+- Create: `harness/voice-assistant/security-privacy-checklist.md`
+- Create: `harness/voice-assistant/multi-agent-operating-model.md`
+
+- [ ] **Step 1: 固化多 Agent 自动触发规则**
+  - Expected: `AGENTS.md` 明确什么时候启用 Planner / Dispatcher / Worker / Evaluator / Safety Reviewer。
+
+- [ ] **Step 2: 建立 PRD traceability harness**
+  - Expected: D1.1-D1.8 均有当前状态、下一证据和验收 gate。
+
+- [ ] **Step 3: 建立端到端验收场景**
+  - Expected: 10 轮对话、10 次打断、麦克风拒绝、provider 失败、敏感记忆、联网安全都可重复验收。
+
+- [ ] **Step 4: 建立开源复现 source lock**
+  - Expected: LiveKit Agents、Pipecat、Volcengine RTC AIGC Demo、Silero VAD 等候选项目有用途、优先级、license 审查状态和复现命令占位。
+
+- [ ] **Step 5: Commit**
+  - Commit message: `docs: add voice assistant multi-agent harness`
+
+### Sprint 0B: 对齐、选型、环境可用
 
 **目标：** 不再盲改 UI。先把模型、协议、开源复现、验收指标和开发规则固定下来。
 
@@ -69,7 +114,7 @@
 
 - [ ] **Step 2: Create open-source evaluation doc**
   - Compare LiveKit Agents, Pipecat, Volcengine RTC AIGC Demo, TEN, OpenAI Realtime Agents Demo, Vocode, Doubao-specific examples.
-  - Expected: selected primary spike path and fallback path.
+  - Expected: selected primary spike path and fallback path; `source-lock.json` 记录是否允许复制代码。
 
 - [ ] **Step 3: Define realtime voice acceptance fixtures**
   - Add 10-turn manual script, 10 interruption attempts, mic denied, network failure, model failure.

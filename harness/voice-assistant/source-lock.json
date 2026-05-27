@@ -1,0 +1,118 @@
+{
+  "updatedAt": "2026-05-27",
+  "policy": "Open-source first. Do not copy code before license and dependency review.",
+  "primarySpikeOrder": [
+    "volcengine-rtc-aigc-demo",
+    "livekit-agents",
+    "pipecat"
+  ],
+  "candidates": [
+    {
+      "id": "volcengine-rtc-aigc-demo",
+      "name": "volcengine/rtc-aigc-demo",
+      "url": "https://github.com/volcengine/rtc-aigc-demo",
+      "module": "Doubao/Volcengine realtime voice",
+      "priority": "P0",
+      "status": "to_reproduce",
+      "copyAllowed": false,
+      "licenseReview": "required_before_copy",
+      "why": "Closest to the default Doubao/Volcengine supplier path and can validate Chinese ASR/TTS, RTC Web access, account permissions, and latency.",
+      "spikeEvidenceRequired": [
+        "account and service activation checklist",
+        "browser joins realtime session",
+        "server owns credentials",
+        "audio input reaches service",
+        "audio output plays in browser",
+        "interrupt or cancel evidence",
+        "masked logs"
+      ]
+    },
+    {
+      "id": "livekit-agents",
+      "name": "livekit/agents",
+      "url": "https://github.com/livekit/agents",
+      "module": "Realtime voice agent and WebRTC transport",
+      "priority": "P0",
+      "status": "to_reproduce",
+      "copyAllowed": false,
+      "licenseReview": "required_before_copy",
+      "why": "Strong reference for server-side voice agents, browser SDK, STT/LLM/TTS plugins, VAD, turn detection, and interruption semantics.",
+      "spikeEvidenceRequired": [
+        "basic voice agent running",
+        "browser client connected",
+        "server-side key boundary",
+        "turn detection evidence",
+        "interrupt evidence",
+        "integration fit with Next.js page"
+      ]
+    },
+    {
+      "id": "pipecat",
+      "name": "pipecat-ai/pipecat",
+      "url": "https://github.com/pipecat-ai/pipecat",
+      "module": "Voice pipeline, transport, VAD, metrics",
+      "priority": "P0",
+      "status": "to_reproduce",
+      "copyAllowed": false,
+      "licenseReview": "required_before_copy",
+      "why": "Good reference for realtime voice pipelines, WebSocket/WebRTC transports, VAD, STT/TTS/LLM composition, and metrics.",
+      "spikeEvidenceRequired": [
+        "quickstart or WebRTC demo running",
+        "pipeline event logs",
+        "caption or transcript stream",
+        "interruption path",
+        "Chinese provider replacement estimate"
+      ]
+    },
+    {
+      "id": "silero-vad",
+      "name": "snakers4/silero-vad",
+      "url": "https://github.com/snakers4/silero-vad",
+      "module": "VAD and interruption trigger",
+      "priority": "P1",
+      "status": "to_validate_through_voice_framework",
+      "copyAllowed": false,
+      "licenseReview": "required_before_copy",
+      "why": "Useful for detecting elder speech start during assistant playback and reducing fake interruption completion.",
+      "spikeEvidenceRequired": [
+        "speech start latency",
+        "noise false trigger rate",
+        "integration path through LiveKit or Pipecat"
+      ]
+    },
+    {
+      "id": "doubao-speech-go",
+      "name": "giztoy/doubao-speech-go",
+      "url": "https://pkg.go.dev/github.com/giztoy/doubao-speech-go/examples/realtime",
+      "module": "Doubao realtime event semantics",
+      "priority": "P1",
+      "status": "reference_only",
+      "copyAllowed": false,
+      "licenseReview": "required_before_copy",
+      "why": "Can clarify Doubao operations such as session open, audio send, interrupt, and close, but it is a third-party library and not the SGX frontend architecture.",
+      "spikeEvidenceRequired": [
+        "official docs comparison",
+        "event names mapped to SGX provider contract",
+        "no direct dependency decision before review"
+      ]
+    }
+  ],
+  "laterReferences": [
+    "openai/openai-realtime-agents",
+    "TEN-framework/ten-framework",
+    "vocodedev/vocode-core",
+    "whisper.cpp",
+    "faster-whisper",
+    "sherpa-onnx",
+    "Piper",
+    "openWakeWord",
+    "livekit-wakeword",
+    "SearXNG",
+    "Mozilla Readability",
+    "Mem0",
+    "pgvector",
+    "LangGraph.js",
+    "Mastra",
+    "AI SDK"
+  ]
+}
