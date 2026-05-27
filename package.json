@@ -7,7 +7,9 @@
     "dev": "next dev -H 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:voice:realtime": "node scripts/voice-realtime-smoke.mjs",
+    "test:voice:secret": "node scripts/voice-secret-scan.mjs AGENTS.md docs harness scripts src"
   },
   "dependencies": {
     "date-fns": "^3.6.0",

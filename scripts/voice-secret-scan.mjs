@@ -76,6 +76,9 @@ function walk(targetPath) {
     for (const { name, pattern } of secretPatterns) {
       pattern.lastIndex = 0;
       if (pattern.test(line)) {
+        if (name === 'api-key-assignment' && /(your-api-key|=\s*\.\.\.)/.test(line)) {
+          continue;
+        }
         findings.push({
           file: targetPath,
           line: lineIndex + 1,
