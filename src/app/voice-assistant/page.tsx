@@ -1489,8 +1489,6 @@ export default function VoiceAssistantPage() {
           </div>
         </header>
 
-        {notice && <div className={styles.notice} role="alert">{notice}</div>}
-
         <section className={styles.stage} aria-label="AI 语音助手通话区">
           <div
             className={`${styles.animeAvatar} ${isSpeaking ? styles.animeAvatarSpeaking : ''} ${isRecording ? styles.animeAvatarListening : ''}`}
@@ -1498,54 +1496,37 @@ export default function VoiceAssistantPage() {
             data-testid="anime-avatar"
           >
             <div className={styles.avatarGlow} />
-            <svg className={styles.avatarSvg} viewBox="0 0 240 240" role="img">
-              <defs>
-                <radialGradient id="avatarBacklight" cx="50%" cy="36%" r="66%">
-                  <stop offset="0%" stopColor="#f8fbff" />
-                  <stop offset="58%" stopColor="#cfe9ff" />
-                  <stop offset="100%" stopColor="#a9d1ff" />
-                </radialGradient>
-                <linearGradient id="avatarSkin" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#ffe4cf" />
-                  <stop offset="100%" stopColor="#f5ad86" />
-                </linearGradient>
-                <linearGradient id="avatarHair" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#2e1b15" />
-                  <stop offset="56%" stopColor="#53301e" />
-                  <stop offset="100%" stopColor="#22120e" />
-                </linearGradient>
-                <linearGradient id="avatarSweater" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="#263846" />
-                  <stop offset="100%" stopColor="#111923" />
-                </linearGradient>
-              </defs>
-              <circle cx="120" cy="112" r="94" fill="url(#avatarBacklight)" />
-              <ellipse className={styles.avatarShadow} cx="120" cy="213" rx="52" ry="12" fill="#8eb8e1" opacity="0.22" />
-              <path d="M64 218c8-34 28-51 56-51s48 17 56 51H64z" fill="url(#avatarSweater)" />
-              <path d="M82 188c9 18 25 29 38 29s29-11 38-29" fill="none" stroke="#f8fbff" strokeWidth="6" strokeLinecap="round" opacity="0.88" />
-              <g className={styles.avatarHead}>
-                <path className={styles.avatarHairBack} d="M57 117c0-51 27-84 66-84 38 0 65 29 65 78 0 47-26 77-66 77-39 0-65-28-65-71z" fill="url(#avatarHair)" />
-                <path d="M75 118c0-41 19-67 50-67 31 0 51 27 51 68 0 39-22 66-51 66-30 0-50-26-50-67z" fill="url(#avatarSkin)" />
-                <path className={styles.avatarFringe} d="M58 108c3-46 27-77 66-77 35 0 62 27 65 67-23-9-42-28-48-54-11 38-40 62-83 64z" fill="url(#avatarHair)" />
-                <path d="M78 116c8-4 19-4 27 0" fill="none" stroke="#2c1a14" strokeWidth="5" strokeLinecap="round" opacity="0.72" />
-                <path d="M136 116c8-4 19-4 27 0" fill="none" stroke="#2c1a14" strokeWidth="5" strokeLinecap="round" opacity="0.72" />
-                <g className={styles.avatarEyes}>
-                  <ellipse cx="93" cy="131" rx="12" ry="16" fill="#211510" />
-                  <ellipse cx="149" cy="131" rx="12" ry="16" fill="#211510" />
-                  <circle cx="89" cy="126" r="4" fill="#fff" opacity="0.92" />
-                  <circle cx="145" cy="126" r="4" fill="#fff" opacity="0.92" />
-                  <circle cx="97" cy="137" r="3" fill="#a77b5f" opacity="0.72" />
-                  <circle cx="153" cy="137" r="3" fill="#a77b5f" opacity="0.72" />
-                </g>
-                <ellipse cx="73" cy="147" rx="12" ry="8" fill="#f29a94" opacity="0.38" />
-                <ellipse cx="170" cy="147" rx="12" ry="8" fill="#f29a94" opacity="0.38" />
-                <g className={styles.avatarMouth}>
-                  <path className={styles.mouthSmile} d="M106 158c8 9 22 9 30 0" fill="none" stroke="#a55457" strokeWidth="4" strokeLinecap="round" />
-                  <ellipse className={styles.mouthOpen} cx="121" cy="160" rx="12" ry="8" fill="#7d3137" />
-                  <ellipse className={styles.mouthWide} cx="121" cy="160" rx="17" ry="6" fill="#7d3137" />
-                </g>
-              </g>
-            </svg>
+            <div className={styles.avatarFigure}>
+              <div className={styles.avatarBody}>
+                <div className={styles.avatarCollar} />
+              </div>
+              <div className={styles.avatarNeck} />
+              <div className={styles.avatarHairBack} />
+              <div className={styles.avatarHead}>
+                <div className={styles.avatarFaceHighlight} />
+                <div className={`${styles.avatarEar} ${styles.avatarEarLeft}`} />
+                <div className={`${styles.avatarEar} ${styles.avatarEarRight}`} />
+                <div className={styles.avatarHairCap} />
+                <div className={styles.avatarFringeLeft} />
+                <div className={styles.avatarFringeRight} />
+                <div className={`${styles.avatarBrow} ${styles.avatarBrowLeft}`} />
+                <div className={`${styles.avatarBrow} ${styles.avatarBrowRight}`} />
+                <div className={`${styles.avatarEye} ${styles.avatarEyeLeft}`}>
+                  <span />
+                </div>
+                <div className={`${styles.avatarEye} ${styles.avatarEyeRight}`}>
+                  <span />
+                </div>
+                <div className={`${styles.avatarCheek} ${styles.avatarCheekLeft}`} />
+                <div className={`${styles.avatarCheek} ${styles.avatarCheekRight}`} />
+                <div className={styles.avatarNose} />
+                <div className={styles.avatarMouth}>
+                  <span className={styles.mouthSmile} />
+                  <span className={styles.mouthOpen} />
+                  <span className={styles.mouthWide} />
+                </div>
+              </div>
+            </div>
             <div className={styles.avatarListeningRing} />
           </div>
 
@@ -1655,6 +1636,8 @@ export default function VoiceAssistantPage() {
             ))}
           </aside>
         )}
+
+        {notice && <div className={styles.notice} role="status" aria-live="polite">{notice}</div>}
       </section>
     </main>
   );
