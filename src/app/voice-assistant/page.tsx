@@ -26,6 +26,12 @@ interface RealtimeAudioDelta {
   mimeType: string;
 }
 
+interface ServerTtsAudio extends RealtimeAudioDelta {
+  provider?: string;
+  model?: string;
+  voiceId?: string;
+}
+
 interface RealtimeTextDelta {
   text: string;
   role?: 'user' | 'assistant';
@@ -139,7 +145,6 @@ export default function VoiceAssistantPage() {
   const [memoryCandidates, setMemoryCandidates] = useState<MemoryCandidateLite[]>([]);
 
   const recognitionRef = useRef<any>(null);
-  const currentUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const speechQueueRef = useRef<string[]>([]);
   const speechBufferRef = useRef('');
   const displayQueueRef = useRef('');
@@ -161,6 +166,7 @@ export default function VoiceAssistantPage() {
   const callActiveRef = useRef(false);
   const sentFinalRef = useRef(false);
   const messageAbortRef = useRef<AbortController | null>(null);
+  const activeTurnIdRef = useRef(0);
   const interruptTimeoutRef = useRef<number | null>(null);
   const vadStreamRef = useRef<MediaStream | null>(null);
   const vadContextRef = useRef<AudioContext | null>(null);
@@ -175,6 +181,7 @@ export default function VoiceAssistantPage() {
   const realtimeChunkSequenceRef = useRef(0);
   const realtimeMimeTypeRef = useRef('audio/webm');
   const lastProviderForwardReasonRef = useRef('');
+  const serverTtsUnavailableNotifiedRef = useRef(false);
   const audioQueueRef = useRef<RealtimeAudioDelta[]>([]);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const currentAudioUrlRef = useRef<string | null>(null);
@@ -261,10 +268,6 @@ export default function VoiceAssistantPage() {
   };
 
   const stopSpeakingNow = () => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-    }
-    currentUtteranceRef.current = null;
     speechQueueRef.current = [];
     speechBufferRef.current = '';
     isSpeechQueueActiveRef.current = false;
@@ -288,8 +291,11 @@ export default function VoiceAssistantPage() {
   };
 
   const interruptSpeech = async (reason: 'user_speech' | 'manual_stop' = 'manual_stop') => {
+    activeTurnIdRef.current += 1;
     messageAbortRef.current?.abort();
+    clearAssistantDisplayQueue();
     stopSpeakingNow();
+    finishAssistantStreaming();
     setVoiceState('interrupted');
     const activeRealtimeSessionId = realtimeSessionIdRef.current;
     if (activeRealtimeSessionId && !realtimeFallbackModeRef.current) {
@@ -626,7 +632,63 @@ export default function VoiceAssistantPage() {
     }, 260);
   };
 
-  const playNextSpeechChunk = () => {
+  const playServerTtsAudio = (audioDelta: ServerTtsAudio) => {
+    const blob = base64ToBlob(audioDelta.base64Audio, audioDelta.mimeType);
+    const objectUrl = URL.createObjectURL(blob);
+    const audio = new Audio(objectUrl);
+    currentAudioRef.current = audio;
+    currentAudioUrlRef.current = objectUrl;
+    assistantSpeechStartedAtRef.current = Date.now();
+    void startBargeInMonitor();
+    setIsSpeaking(true);
+    setVoiceState('speaking');
+
+    const cleanup = () => {
+      isSpeechQueueActiveRef.current = false;
+      URL.revokeObjectURL(objectUrl);
+      if (currentAudioRef.current === audio) currentAudioRef.current = null;
+      if (currentAudioUrlRef.current === objectUrl) currentAudioUrlRef.current = null;
+      if (callActiveRef.current) {
+        window.setTimeout(playNextSpeechChunk, 60);
+      }
+    };
+
+    audio.onended = cleanup;
+    audio.onerror = () => {
+      cleanup();
+      setNotice('高音色 TTS 音频播放失败了，本轮先看大字幕。');
+    };
+    void audio.play().catch(() => {
+      cleanup();
+      setNotice('浏览器阻止了服务端 TTS 音频播放，请先点击页面后重试。');
+    });
+  };
+
+  const synthesizeServerSpeech = async (text: string): Promise<ServerTtsAudio | null> => {
+    const response = await authenticatedFetch('/api/voice/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    const result = await response.json() as {
+      success: boolean;
+      data?: { available?: boolean; audio?: ServerTtsAudio; reason?: string };
+      error?: { message?: string };
+    };
+    if (!result.success) {
+      throw new Error(result.error?.message || '高音色 TTS 合成失败');
+    }
+    if (!result.data?.available || !result.data.audio) {
+      if (!serverTtsUnavailableNotifiedRef.current) {
+        serverTtsUnavailableNotifiedRef.current = true;
+        setNotice('高音色 TTS 未配置，本轮只显示大字幕；请配置 MiniMax 或豆包 TTS 后再验收音色。');
+      }
+      return null;
+    }
+    return result.data.audio;
+  };
+
+  function playNextSpeechChunk() {
     if (isSpeechQueueActiveRef.current || !callActiveRef.current) return;
     const next = speechQueueRef.current.shift();
     if (!next) {
@@ -636,43 +698,26 @@ export default function VoiceAssistantPage() {
       return;
     }
 
-    if (!('speechSynthesis' in window)) {
-      setNotice('当前浏览器不能播放语音，我会用大字幕显示回复。');
-      setVoiceState('listening');
-      return;
-    }
-
-    const utterance = new SpeechSynthesisUtterance(next);
-    currentUtteranceRef.current = utterance;
-    utterance.lang = 'zh-CN';
-    utterance.rate = 0.86;
-    utterance.pitch = 1;
-    const chineseVoice = window.speechSynthesis.getVoices().find(voice => voice.lang.includes('zh'));
-    if (chineseVoice) utterance.voice = chineseVoice;
-    utterance.onstart = () => {
-      if (!callActiveRef.current) return;
-      isSpeechQueueActiveRef.current = true;
-      assistantSpeechStartedAtRef.current = Date.now();
-      void startBargeInMonitor();
-      setIsSpeaking(true);
-      setVoiceState('speaking');
-    };
-    utterance.onend = () => {
-      if (!callActiveRef.current) return;
-      isSpeechQueueActiveRef.current = false;
-      currentUtteranceRef.current = null;
-      window.setTimeout(playNextSpeechChunk, 80);
-    };
-    utterance.onerror = () => {
-      if (!callActiveRef.current) return;
-      isSpeechQueueActiveRef.current = false;
-      currentUtteranceRef.current = null;
-      setIsSpeaking(false);
-      setVoiceState('error');
-      setNotice('语音播报失败了，可以先看大字幕或用文字继续。');
-    };
-    window.speechSynthesis.speak(utterance);
-  };
+    isSpeechQueueActiveRef.current = true;
+    synthesizeServerSpeech(next)
+      .then(audioDelta => {
+        if (!callActiveRef.current) return;
+        if (!audioDelta) {
+          isSpeechQueueActiveRef.current = false;
+          setIsSpeaking(false);
+          if (voiceStateRef.current === 'speaking') setVoiceState('listening');
+          window.setTimeout(playNextSpeechChunk, 30);
+          return;
+        }
+        playServerTtsAudio(audioDelta);
+      })
+      .catch(error => {
+        isSpeechQueueActiveRef.current = false;
+        setIsSpeaking(false);
+        setNotice(error instanceof Error ? error.message : '高音色 TTS 合成失败，本轮先看大字幕。');
+        window.setTimeout(playNextSpeechChunk, 80);
+      });
+  }
 
   const enqueueSpeechText = (text: string) => {
     const chunks = splitForSpeech(text);
@@ -727,7 +772,6 @@ export default function VoiceAssistantPage() {
   });
 
   const speakText = (text: string) => {
-    window.speechSynthesis?.cancel();
     speechQueueRef.current = [];
     speechBufferRef.current = '';
     isSpeechQueueActiveRef.current = false;
@@ -754,6 +798,12 @@ export default function VoiceAssistantPage() {
         : message
     )));
   };
+
+  const isCurrentTurn = (turnId: number, abortController: AbortController) => (
+    callActiveRef.current
+    && activeTurnIdRef.current === turnId
+    && !abortController.signal.aborted
+  );
 
   const boot = async () => {
     setVoiceState('booting');
@@ -789,7 +839,7 @@ export default function VoiceAssistantPage() {
 
       if (voiceResult.data.voiceSession.fallbackMode) {
         setRealtimeFallbackMode(true);
-        setNotice('当前是浏览器 ASR/TTS 测试模式，不是真实豆包实时语音流。');
+        setNotice('当前是浏览器 ASR + 服务端高音色 TTS/字幕 fallback，不是真实豆包实时语音流。');
       } else {
         const realtimeResponse = await authenticatedFetch('/api/voice/realtime', {
           method: 'POST',
@@ -852,6 +902,9 @@ export default function VoiceAssistantPage() {
     if (!text || !conversationSessionId) return;
     if (isSpeakingRef.current) await interruptSpeech('user_speech');
 
+    messageAbortRef.current?.abort();
+    const turnId = activeTurnIdRef.current + 1;
+    activeTurnIdRef.current = turnId;
     clearAssistantDisplayQueue();
     setInput('');
     setMessages(prev => [
@@ -860,7 +913,6 @@ export default function VoiceAssistantPage() {
       { role: 'assistant', content: '', timestamp: new Date().toISOString(), streaming: true },
     ]);
     setVoiceState('thinking');
-    messageAbortRef.current?.abort();
     const abortController = new AbortController();
     messageAbortRef.current = abortController;
 
@@ -884,16 +936,28 @@ export default function VoiceAssistantPage() {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        if (!isCurrentTurn(turnId, abortController)) {
+          await reader.cancel().catch(() => {});
+          return;
+        }
         buffer += decoder.decode(value, { stream: true });
         const blocks = buffer.split('\n\n');
         buffer = blocks.pop() || '';
 
         for (const block of blocks) {
+          if (!isCurrentTurn(turnId, abortController)) {
+            await reader.cancel().catch(() => {});
+            return;
+          }
           const event = block.match(/^event:\s*(.+)$/m)?.[1]?.trim();
           const dataText = block.match(/^data:\s*(.+)$/m)?.[1];
           if (!event || !dataText) continue;
           const data = JSON.parse(dataText);
 
+          if (event === 'status') {
+            if (voiceStateRef.current !== 'thinking') setVoiceState('thinking');
+            if (typeof data.message === 'string') setNotice(data.message);
+          }
           if (event === 'delta' && typeof data.text === 'string') {
             if (voiceStateRef.current === 'thinking') setVoiceState('speaking');
             enqueueAssistantDisplayDelta(data.text);
@@ -908,10 +972,10 @@ export default function VoiceAssistantPage() {
         }
       }
 
-      if (!callActiveRef.current || abortController.signal.aborted) return;
+      if (!isCurrentTurn(turnId, abortController)) return;
       queueSpeechDelta('', true);
       await waitForAssistantDisplayQueue();
-      if (!callActiveRef.current || abortController.signal.aborted) return;
+      if (!isCurrentTurn(turnId, abortController)) return;
       finishAssistantStreaming();
 
       if (finalData?.memoryCandidates?.length) {
@@ -922,11 +986,14 @@ export default function VoiceAssistantPage() {
       }
     } catch (error) {
       if ((error as any)?.name === 'AbortError') {
-        clearAssistantDisplayQueue();
-        finishAssistantStreaming();
-        queueSpeechDelta('', true);
+        if (isCurrentTurn(turnId, abortController)) {
+          clearAssistantDisplayQueue();
+          finishAssistantStreaming();
+          queueSpeechDelta('', true);
+        }
         return;
       }
+      if (!isCurrentTurn(turnId, abortController)) return;
       finishAssistantStreaming();
       setVoiceState('error');
       setNotice(error instanceof Error ? error.message : '发送失败，请稍后再试。');
@@ -1011,6 +1078,7 @@ export default function VoiceAssistantPage() {
 
   const endCall = async () => {
     callActiveRef.current = false;
+    activeTurnIdRef.current += 1;
     messageAbortRef.current?.abort();
     clearAssistantDisplayQueue();
     recognitionRef.current?.abort?.();

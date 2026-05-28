@@ -10,6 +10,14 @@ async function readText(path) {
   return readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 }
 
+async function readOptionalText(path) {
+  try {
+    return await readText(path);
+  } catch {
+    return '';
+  }
+}
+
 function expect(condition, name, detail = '') {
   record(name, Boolean(condition), detail);
 }
@@ -28,6 +36,9 @@ async function runStaticContractChecks() {
     realtimeRouteSource,
     conversationStreamRouteSource,
     voiceAssistantPageSource,
+    voiceTtsRouteSource,
+    voiceTtsConfigSource,
+    minimaxTtsProviderSource,
     llmClientSource,
     llmProviderSource,
     stateMachineCasesSource,
@@ -45,6 +56,9 @@ async function runStaticContractChecks() {
     readText('src/app/api/voice/realtime/route.ts'),
     readText('src/app/api/conversation/message/stream/route.ts'),
     readText('src/app/voice-assistant/page.tsx'),
+    readOptionalText('src/app/api/voice/tts/route.ts'),
+    readOptionalText('src/lib/voice/tts/config.ts'),
+    readOptionalText('src/lib/voice/tts/minimax-provider.ts'),
     readText('src/lib/llm/client.ts'),
     readText('src/lib/llm/providers/openai-compatible.ts'),
     readText('harness/voice-assistant/state-machine-cases.json'),
@@ -116,9 +130,9 @@ async function runStaticContractChecks() {
   expect(realtimeRouteSource.includes('textDeltas: flushDoubaoRealtimeTextOutput'), 'realtime route returns minimal provider text deltas');
   expect(conversationStreamRouteSource.includes('text/event-stream'), 'conversation stream route returns SSE');
   expect(conversationStreamRouteSource.includes("write('delta'"), 'conversation stream route emits text deltas');
-  expect(conversationStreamRouteSource.includes('immediateAck') && conversationStreamRouteSource.includes("write('delta', { text: immediateAck })"), 'conversation stream route sends immediate acknowledgement before slow preparation work');
-  expect(conversationStreamRouteSource.includes('streamWithFastAck'), 'conversation stream route emits a fast acknowledgement when first model token is slow');
-  expect(conversationStreamRouteSource.includes('VOICE_ASSISTANT_FAST_ACK_MS'), 'conversation stream route exposes fast acknowledgement timeout config');
+  expect(!conversationStreamRouteSource.includes('immediateAck'), 'conversation stream route does not inject thinking copy into official assistant deltas');
+  expect(!conversationStreamRouteSource.includes('我听到了，我先想一下'), 'conversation stream route does not hard-code spoken thinking acknowledgements');
+  expect(conversationStreamRouteSource.includes("write('status'"), 'conversation stream route can emit UI-only status events');
   expect(conversationStreamRouteSource.includes('maxTokens: 320'), 'conversation stream route keeps voice replies bounded for latency');
   expect(llmClientSource.includes('streamLLM'), 'LLM client exposes streaming helper');
   expect(llmProviderSource.includes('stream: true'), 'OpenAI-compatible provider requests streaming completions');
@@ -128,10 +142,16 @@ async function runStaticContractChecks() {
   expect(voiceAssistantPageSource.includes('applyRealtimeTextDeltas'), 'voice assistant page updates captions from provider text deltas');
   expect(voiceAssistantPageSource.includes('/api/conversation/message/stream'), 'voice assistant page uses streaming message endpoint');
   expect(voiceAssistantPageSource.includes("voiceStateRef.current === 'thinking'") && voiceAssistantPageSource.includes("setVoiceState('speaking')"), 'voice assistant page switches to speaking as soon as first delta arrives');
+  expect(voiceAssistantPageSource.includes('activeTurnIdRef'), 'voice assistant page tracks active text turn IDs');
+  expect(voiceAssistantPageSource.includes('isCurrentTurn'), 'voice assistant page drops stale stream events from older turns');
   expect(voiceAssistantPageSource.includes('enqueueAssistantDisplayDelta'), 'voice assistant page reveals assistant text through a typewriter queue');
   expect(voiceAssistantPageSource.includes('waitForAssistantDisplayQueue'), 'voice assistant page waits for visual streaming before closing assistant message');
-  expect(voiceAssistantPageSource.includes('speechQueueRef'), 'voice assistant page uses queued TTS playback');
-  expect(voiceAssistantPageSource.includes('currentUtteranceRef'), 'voice assistant page retains current utterance to prevent early TTS stop');
+  expect(voiceAssistantPageSource.includes('speechQueueRef'), 'voice assistant page uses queued server-side TTS playback');
+  expect(voiceAssistantPageSource.includes('/api/voice/tts'), 'voice assistant page requests high-quality server-side TTS fallback');
+  expect(!voiceAssistantPageSource.includes('new SpeechSynthesisUtterance'), 'voice assistant page no longer uses browser SpeechSynthesis as formal voice output');
+  expect(voiceTtsRouteSource.includes('synthesizeSpeech'), 'voice TTS route calls the provider abstraction');
+  expect(voiceTtsConfigSource.includes('MINIMAX_TTS_MODEL') && voiceTtsConfigSource.includes('speech-2.8-turbo'), 'TTS config supports MiniMax Speech 2.8 Turbo');
+  expect(voiceTtsConfigSource.includes('wss://') && minimaxTtsProviderSource.includes('task_continue'), 'MiniMax TTS provider uses WebSocket streaming task events');
   expect(voiceAssistantPageSource.includes('autoBargeInEnabled'), 'voice assistant page gates experimental auto barge-in');
   expect(voiceAssistantPageSource.includes('useState(true);') && voiceAssistantPageSource.includes('setAutoBargeInEnabled'), 'voice assistant page enables auto barge-in by default');
   expect(voiceAssistantPageSource.includes('vadNoiseFloorRef'), 'voice assistant page uses adaptive noise-floor VAD threshold');
@@ -142,6 +162,7 @@ async function runStaticContractChecks() {
   expect(voiceAssistantPageSource.includes('您直接说话即可打断'), 'voice assistant page explains voice-triggered interruption');
   expect(voiceAssistantPageSource.includes('clearRealtimePlayback'), 'voice assistant clears realtime playback on interrupt/end');
   expect(secretScanSource.includes('provider-secret-assignment'), 'secret scan covers provider ACCESS_KEY and APP_KEY assignments');
+  expect(secretScanSource.includes('MINIMAX'), 'secret scan covers MiniMax TTS API key assignments');
 }
 
 function runProviderReadinessChecks() {

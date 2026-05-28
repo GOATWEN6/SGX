@@ -68,9 +68,9 @@ async function startConversation() {
     body: JSON.stringify({ mode: 'web_voice_call', conversationType: 'ai_chat' }),
   });
   conversationSessionId = body.data?.session?.id || '';
-  expect(response.status === 200 && body.success, '启动基础对话 session');
-  expect(body.data?.session?.mode === 'web_voice_call', 'session mode 为 web_voice_call');
-  expect(body.data?.session?.conversationType === 'ai_chat', 'conversationType 为 ai_chat');
+  expect(response.status === 200 && body.success, '启动基础对话 session', JSON.stringify({ status: response.status, body }));
+  expect(body.data?.session?.mode === 'web_voice_call', 'session mode 为 web_voice_call', JSON.stringify(body.data?.session || body));
+  expect(body.data?.session?.conversationType === 'ai_chat', 'conversationType 为 ai_chat', JSON.stringify(body.data?.session || body));
 }
 
 async function startVoiceSession() {
@@ -89,7 +89,7 @@ async function sendMessage(message, assertions) {
     method: 'POST',
     body: JSON.stringify({ sessionId: conversationSessionId, message }),
   });
-  expect(response.status === 200 && body.success, `发送消息成功：${message}`);
+  expect(response.status === 200 && body.success, `发送消息成功：${message}`, JSON.stringify({ status: response.status, body }));
   if (body.data?.memoryCandidates?.length) {
     candidateIds.push(...body.data.memoryCandidates.map(candidate => candidate.id));
   }
@@ -230,7 +230,11 @@ async function negativeCases() {
   expect(badMessage.response.status === 400, '空消息返回 400');
 
   const badCandidate = await request('/api/memory/candidates/not-a-real-id/confirm', { method: 'POST' });
-  expect(badCandidate.response.status === 404, '不存在候选记忆返回 404');
+  expect(
+    badCandidate.response.status === 404,
+    '不存在候选记忆返回 404',
+    JSON.stringify({ status: badCandidate.response.status, body: badCandidate.body })
+  );
 
   const badStatus = await request('/api/memory/candidates?status=bad_status');
   expect(badStatus.response.status === 400, '非法候选记忆 status 返回 400');
@@ -255,15 +259,24 @@ async function staticFrontendChecks() {
   const standalonePageSource = await readFile(new URL('../src/app/voice-assistant/page.tsx', import.meta.url), 'utf8');
   const standaloneStyleSource = await readFile(new URL('../src/app/voice-assistant/voice-assistant.module.css', import.meta.url), 'utf8');
   const standaloneStreamRouteSource = await readFile(new URL('../src/app/api/conversation/message/stream/route.ts', import.meta.url), 'utf8');
+  const ttsRouteSource = await readFile(new URL('../src/app/api/voice/tts/route.ts', import.meta.url), 'utf8').catch(() => '');
+  const ttsConfigSource = await readFile(new URL('../src/lib/voice/tts/config.ts', import.meta.url), 'utf8').catch(() => '');
+  const minimaxTtsProviderSource = await readFile(new URL('../src/lib/voice/tts/minimax-provider.ts', import.meta.url), 'utf8').catch(() => '');
   expect(standalonePageSource.includes('AI 语音助手'), '存在独立 AI 语音助手页面');
   expect(standalonePageSource.includes("body: JSON.stringify({ mode: 'web_voice_call', conversationType: 'ai_chat' })"), '独立页面启动 web_voice_call 对话');
   expect(standalonePageSource.includes('startBargeInMonitor'), '独立页面包含自动打断 VAD 逻辑');
   expect(standalonePageSource.includes('/api/conversation/message/stream'), '独立页面使用流式文字回复接口');
   expect(standalonePageSource.includes("voiceStateRef.current === 'thinking'") && standalonePageSource.includes("setVoiceState('speaking')"), '独立页面收到首个 delta 后立即进入 AI 说话状态');
+  expect(standalonePageSource.includes('activeTurnIdRef'), '独立页面用 turnId 标记当前文本轮次');
+  expect(standalonePageSource.includes('isCurrentTurn'), '独立页面丢弃旧文本流事件，避免上一问回答串到下一问');
   expect(standalonePageSource.includes('enqueueAssistantDisplayDelta'), '独立页面把模型增量放入逐字字幕队列');
   expect(standalonePageSource.includes('waitForAssistantDisplayQueue'), '独立页面在关闭流式消息前等待逐字字幕完成');
-  expect(standalonePageSource.includes('speechQueueRef'), '独立页面使用 TTS 分句队列');
-  expect(standalonePageSource.includes('currentUtteranceRef'), '独立页面保留 SpeechSynthesisUtterance 引用');
+  expect(standalonePageSource.includes('speechQueueRef'), '独立页面使用服务端高音色 TTS 分句队列');
+  expect(standalonePageSource.includes('/api/voice/tts'), '独立页面通过服务端高音色 TTS fallback 播放语音');
+  expect(!standalonePageSource.includes('new SpeechSynthesisUtterance'), '独立页面不再把浏览器 SpeechSynthesis 作为正式语音输出');
+  expect(ttsRouteSource.includes('synthesizeSpeech'), '服务端 TTS fallback 有独立 API 路由');
+  expect(ttsConfigSource.includes('MINIMAX_TTS_MODEL') && ttsConfigSource.includes('speech-2.8-turbo'), '服务端 TTS fallback 优先支持 MiniMax Speech 2.8 Turbo');
+  expect(minimaxTtsProviderSource.includes('task_continue'), 'MiniMax TTS provider 使用 WebSocket task_continue 发送文本');
   expect(standalonePageSource.includes('startMicMeter'), '独立页面包含麦克风音量波动检测');
   expect(standalonePageSource.includes('autoBargeInEnabled'), '独立页面把自动打断做成显式开关');
   expect(standalonePageSource.includes('useState(true);') && standalonePageSource.includes('setAutoBargeInEnabled'), '独立页面默认开启自动语音打断');
@@ -282,9 +295,9 @@ async function staticFrontendChecks() {
   expect(standaloneStyleSource.includes('.animeAvatar'), '独立页面包含动漫 AI 形象样式');
   expect(standaloneStyleSource.includes('@keyframes mouthOpenFrame'), '动漫角色包含说话口型动画');
   expect(standaloneStyleSource.includes('.avatarListeningRing'), '动漫角色包含聆听状态动画');
-  expect(standaloneStreamRouteSource.includes('streamWithFastAck'), '流式接口在模型首 token 慢时发送快速确认');
-  expect(standaloneStreamRouteSource.includes('immediateAck') && standaloneStreamRouteSource.includes("write('delta', { text: immediateAck })"), '流式接口在准备上下文前先发送即时确认');
-  expect(standaloneStreamRouteSource.includes('VOICE_ASSISTANT_FAST_ACK_MS'), '快速确认超时时间可通过环境变量调整');
+  expect(standaloneStreamRouteSource.includes("write('status'"), '流式接口只把思考状态作为 UI-only status 事件');
+  expect(!standaloneStreamRouteSource.includes('immediateAck'), '流式接口不再把即时确认作为正式回复内容');
+  expect(!standaloneStreamRouteSource.includes('我听到了，我先想一下'), '流式接口不再硬编码会被播报和入库的思考提示');
   expect(standaloneStreamRouteSource.includes('maxTokens: 320'), '语音助手流式回复限制 token 数以降低延迟');
 }
 

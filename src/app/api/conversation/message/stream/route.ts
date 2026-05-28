@@ -14,63 +14,12 @@ function sse(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
-function getFastAckTimeoutMs(): number {
-  const configured = Number(process.env.VOICE_ASSISTANT_FAST_ACK_MS || '900');
-  if (!Number.isFinite(configured)) return 900;
-  return Math.max(200, Math.min(2500, configured));
-}
-
-function buildFastAck(params: {
-  text: string;
-  riskFlags: string[];
-  usedWebSearch: boolean;
-}): string {
-  if (params.riskFlags.includes('high_risk_professional_advice')) {
-    return '我听到了，这个问题要谨慎一点。';
-  }
-  if (params.usedWebSearch) {
-    return '我先按生活信息帮您看一下。';
-  }
-  if (/安全|注意|提醒/.test(params.text)) {
-    return '我听到了，我先想几句稳妥的建议。';
-  }
-  return '我听到了，我先想一下。';
-}
-
-async function* streamWithFastAck(
+async function* streamPreparedReply(
   prepared: Awaited<ReturnType<typeof prepareConversationTurn>>,
-  options: { temperature: number; maxTokens: number },
-  hasImmediateAck = false
+  options: { temperature: number; maxTokens: number }
 ): AsyncIterable<string> {
-  const iterator = streamLLM(prepared.systemPrompt, prepared.userPrompt, options)[Symbol.asyncIterator]();
-  const first = await Promise.race<
-    | { type: 'delta'; result: IteratorResult<string> }
-    | { type: 'timeout' }
-  >([
-    iterator.next().then(result => ({ type: 'delta' as const, result })),
-    new Promise<{ type: 'timeout' }>(resolve => {
-      setTimeout(() => resolve({ type: 'timeout' }), getFastAckTimeoutMs());
-    }),
-  ]);
-
-  if (first.type === 'timeout') {
-    if (!hasImmediateAck) {
-      yield buildFastAck({
-        text: prepared.text,
-        riskFlags: prepared.riskFlags,
-        usedWebSearch: prepared.usedWebSearch,
-      });
-    }
-  } else if (!first.result.done && first.result.value) {
-    yield first.result.value;
-  } else {
-    return;
-  }
-
-  while (true) {
-    const next = await iterator.next();
-    if (next.done) return;
-    if (next.value) yield next.value;
+  for await (const delta of streamLLM(prepared.systemPrompt, prepared.userPrompt, options)) {
+    if (delta) yield delta;
   }
 }
 
@@ -100,9 +49,10 @@ export async function POST(request: NextRequest) {
         };
 
         try {
-          const immediateAck = '我听到了，我先想一下。';
-          assistantText += immediateAck;
-          write('delta', { text: immediateAck });
+          write('status', {
+            state: 'thinking',
+            message: '正在组织回复',
+          });
 
           prepared = await prepareConversationTurn({ userId, sessionId, message });
           write('ready', {
@@ -111,10 +61,10 @@ export async function POST(request: NextRequest) {
             riskFlags: prepared.riskFlags,
           });
 
-          for await (const delta of streamWithFastAck(prepared, {
+          for await (const delta of streamPreparedReply(prepared, {
             temperature: 0.65,
             maxTokens: 320,
-          }, true)) {
+          })) {
             assistantText += delta;
             write('delta', { text: delta });
           }
