@@ -149,6 +149,16 @@ async function runStaticContractChecks() {
   expect(voiceAssistantPageSource.includes('speechQueueRef'), 'voice assistant page uses queued server-side TTS playback');
   expect(voiceAssistantPageSource.includes('/api/voice/tts'), 'voice assistant page requests high-quality server-side TTS fallback');
   expect(!voiceAssistantPageSource.includes('new SpeechSynthesisUtterance'), 'voice assistant page no longer uses browser SpeechSynthesis as formal voice output');
+  expect(voiceAssistantPageSource.includes('SPEECH_COMMIT_DELAY_MS'), 'voice assistant page keeps a configurable silence grace window before committing browser ASR');
+  expect(voiceAssistantPageSource.includes('pendingFinalTranscriptRef'), 'voice assistant page accumulates browser ASR final chunks before sending');
+  expect(voiceAssistantPageSource.includes('scheduleSpeechCommit'), 'voice assistant page schedules delayed ASR commit instead of sending on first pause');
+  expect(voiceAssistantPageSource.includes('flushSpeechCommit'), 'voice assistant page can flush accumulated speech manually or after silence');
+  expect(voiceAssistantPageSource.includes('recognitionRef.current.continuous = true'), 'voice assistant page runs browser ASR in continuous mode');
+  expect(!voiceAssistantPageSource.includes('sendMessage(finalText);'), 'voice assistant page does not immediately send first browser ASR final result');
+  expect(voiceAssistantPageSource.includes("isSpeakingRef.current || voiceStateRef.current === 'thinking'"), 'voice assistant page can interrupt a thinking or speaking turn before listening again');
+  expect(!voiceAssistantPageSource.includes("disabled={voiceState === 'thinking' || voiceState === 'booting'}"), 'voice assistant mic is not disabled during thinking, so user can continue or correct themselves');
+  expect(voiceAssistantPageSource.includes('loadTtsStatus'), 'voice assistant page checks high-quality TTS availability on boot');
+  expect(voiceAssistantPageSource.includes('未配置高音色 TTS，所以不会出声'), 'voice assistant page clearly explains no-sound fallback when TTS is missing');
   expect(voiceTtsRouteSource.includes('synthesizeSpeech'), 'voice TTS route calls the provider abstraction');
   expect(voiceTtsConfigSource.includes('MINIMAX_TTS_MODEL') && voiceTtsConfigSource.includes('speech-2.8-turbo'), 'TTS config supports MiniMax Speech 2.8 Turbo');
   expect(voiceTtsConfigSource.includes('wss://') && minimaxTtsProviderSource.includes('task_continue'), 'MiniMax TTS provider uses WebSocket streaming task events');

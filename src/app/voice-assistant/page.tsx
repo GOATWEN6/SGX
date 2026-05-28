@@ -58,6 +58,9 @@ const stateLabel: Record<VoiceState, string> = {
   error: '需要重试',
 };
 
+const SPEECH_COMMIT_DELAY_MS = 1600;
+const SPEECH_RESTART_DELAY_MS = 180;
+
 async function createTestUser(): Promise<string> {
   clearAuth();
 
@@ -158,13 +161,17 @@ export default function VoiceAssistantPage() {
   const micMeterContextRef = useRef<AudioContext | null>(null);
   const micMeterAnalyserRef = useRef<AnalyserNode | null>(null);
   const micMeterIntervalRef = useRef<number | null>(null);
+  const pendingFinalTranscriptRef = useRef('');
+  const interimTranscriptRef = useRef('');
+  const speechCommitTimerRef = useRef<number | null>(null);
+  const recognitionRestartTimerRef = useRef<number | null>(null);
+  const recognitionActiveRef = useRef(false);
   const voiceStateRef = useRef<VoiceState>('booting');
   const isSpeakingRef = useRef(false);
   const voiceSessionIdRef = useRef<string | null>(null);
   const realtimeSessionIdRef = useRef<string | null>(null);
   const realtimeFallbackModeRef = useRef(true);
   const callActiveRef = useRef(false);
-  const sentFinalRef = useRef(false);
   const messageAbortRef = useRef<AbortController | null>(null);
   const activeTurnIdRef = useRef(0);
   const interruptTimeoutRef = useRef<number | null>(null);
@@ -219,6 +226,97 @@ export default function VoiceAssistantPage() {
     micMeterContextRef.current = null;
     micMeterAnalyserRef.current = null;
     setVoiceLevel(0);
+  };
+
+  const clearSpeechCommitTimer = () => {
+    if (speechCommitTimerRef.current !== null) {
+      window.clearTimeout(speechCommitTimerRef.current);
+      speechCommitTimerRef.current = null;
+    }
+  };
+
+  const clearRecognitionRestartTimer = () => {
+    if (recognitionRestartTimerRef.current !== null) {
+      window.clearTimeout(recognitionRestartTimerRef.current);
+      recognitionRestartTimerRef.current = null;
+    }
+  };
+
+  const buildSpeechDraft = () => [pendingFinalTranscriptRef.current, interimTranscriptRef.current]
+    .map(part => part.trim())
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+
+  const updateSpeechDraftInput = () => {
+    setInput(buildSpeechDraft());
+  };
+
+  const clearSpeechDraft = () => {
+    clearSpeechCommitTimer();
+    clearRecognitionRestartTimer();
+    pendingFinalTranscriptRef.current = '';
+    interimTranscriptRef.current = '';
+  };
+
+  const scheduleSpeechCommit = () => {
+    const pendingText = pendingFinalTranscriptRef.current.trim();
+    if (!pendingText) return;
+    clearSpeechCommitTimer();
+    setNotice(`我会在您停顿约 ${Math.round(SPEECH_COMMIT_DELAY_MS / 100) / 10} 秒后发送，您可以继续补充。`);
+    speechCommitTimerRef.current = window.setTimeout(() => {
+      void flushSpeechCommit('silence_timeout');
+    }, SPEECH_COMMIT_DELAY_MS);
+  };
+
+  const flushSpeechCommit = async (reason: 'silence_timeout' | 'manual_stop' = 'silence_timeout') => {
+    clearSpeechCommitTimer();
+    clearRecognitionRestartTimer();
+    const text = pendingFinalTranscriptRef.current.trim() || input.trim();
+    if (!text) {
+      suppressRecognitionEndRef.current = true;
+      recognitionActiveRef.current = false;
+      recognitionRef.current?.stop?.();
+      stopMicMeter();
+      setIsRecording(false);
+      setVoiceState('idle');
+      return;
+    }
+
+    pendingFinalTranscriptRef.current = '';
+    interimTranscriptRef.current = '';
+    suppressRecognitionEndRef.current = true;
+    recognitionActiveRef.current = false;
+    recognitionRef.current?.stop?.();
+    stopMicMeter();
+    setIsRecording(false);
+    setNotice(reason === 'manual_stop' ? '已发送您刚才说的话。' : '检测到您停顿，已发送完整一句。');
+    await sendMessage(text);
+  };
+
+  const loadTtsStatus = async (fallbackMode: boolean) => {
+    const response = await authenticatedFetch('/api/voice/tts', { method: 'GET' });
+    const result = await response.json() as {
+      success: boolean;
+      data?: {
+        status?: {
+          configured?: boolean;
+          provider?: string;
+          model?: string;
+          voiceId?: string;
+        };
+      };
+    };
+    if (!result.success) return;
+
+    const status = result.data?.status;
+    if (!status?.configured) {
+      setNotice('当前是浏览器 ASR + 字幕 fallback；未配置高音色 TTS，所以不会出声。配置 MiniMax TTS 或打通 Doubao realtime audio delta 后再验收声音。');
+      return;
+    }
+    if (fallbackMode) {
+      setNotice(`当前是浏览器 ASR + ${status.provider || 'server'} 高音色 TTS fallback，模型：${status.model || '默认模型'}，音色：${status.voiceId || '默认音色'}。`);
+    }
   };
 
   const startMicMeter = async (existingStream?: MediaStream) => {
@@ -839,7 +937,9 @@ export default function VoiceAssistantPage() {
 
       if (voiceResult.data.voiceSession.fallbackMode) {
         setRealtimeFallbackMode(true);
+        realtimeFallbackModeRef.current = true;
         setNotice('当前是浏览器 ASR + 服务端高音色 TTS/字幕 fallback，不是真实豆包实时语音流。');
+        void loadTtsStatus(true).catch(() => {});
       } else {
         const realtimeResponse = await authenticatedFetch('/api/voice/realtime', {
           method: 'POST',
@@ -856,11 +956,13 @@ export default function VoiceAssistantPage() {
         setRealtimeSessionId(realtimeResult.data.realtimeSession.id);
         const nextFallbackMode = Boolean(realtimeResult.data.realtimeSession.fallbackMode);
         setRealtimeFallbackMode(nextFallbackMode);
+        realtimeFallbackModeRef.current = nextFallbackMode;
         if (!nextFallbackMode) startRealtimeOutputPolling();
         const providerReason = realtimeResult.data.providerConnection?.reason;
         setNotice(providerReason
           ? `实时语音链路已建立服务端会话：${providerReason}`
           : '实时语音链路已建立，点击开始说话会发送音频 chunk 到服务端。');
+        if (nextFallbackMode) void loadTtsStatus(true).catch(() => {});
       }
 
       const greeting = '您好，我是这个页面里的 AI 语音助手。您可以直接说话，也可以打字测试。';
@@ -877,15 +979,17 @@ export default function VoiceAssistantPage() {
     if (SpeechRecognition) {
       recognitionRef.current = new SpeechRecognition();
       recognitionRef.current.lang = 'zh-CN';
-      recognitionRef.current.continuous = false;
+      recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
     }
     boot();
     return () => {
       callActiveRef.current = false;
       messageAbortRef.current?.abort();
+      clearSpeechDraft();
       clearAssistantDisplayQueue();
       recognitionRef.current?.abort?.();
+      recognitionActiveRef.current = false;
       stopSpeakingNow();
       stopBargeInMonitor();
       stopRealtimeCapture(false).catch(() => {});
@@ -902,6 +1006,7 @@ export default function VoiceAssistantPage() {
     if (!text || !conversationSessionId) return;
     if (isSpeakingRef.current) await interruptSpeech('user_speech');
 
+    clearSpeechDraft();
     messageAbortRef.current?.abort();
     const turnId = activeTurnIdRef.current + 1;
     activeTurnIdRef.current = turnId;
@@ -1000,7 +1105,7 @@ export default function VoiceAssistantPage() {
     }
   };
 
-  const startListening = (options: { auto?: boolean } = {}) => {
+  const startListening = async (options: { auto?: boolean; preserveDraft?: boolean } = {}) => {
     autoConversationRef.current = true;
     if (realtimeSessionIdRef.current && !realtimeFallbackModeRef.current) {
       startRealtimeCapture().catch(error => {
@@ -1013,17 +1118,13 @@ export default function VoiceAssistantPage() {
       setNotice('当前浏览器不支持语音识别，请先用文字输入测试。');
       return;
     }
-    if (isRecording) {
-      autoConversationRef.current = false;
-      stopMicMeter();
-      recognitionRef.current.stop();
-      setIsRecording(false);
-      setVoiceState('idle');
+    if ((isRecording || recognitionActiveRef.current) && !options.preserveDraft) {
+      void flushSpeechCommit('manual_stop');
       return;
     }
-    if (isSpeakingRef.current) interruptSpeech('user_speech');
+    if (isSpeakingRef.current || voiceStateRef.current === 'thinking') await interruptSpeech('user_speech');
 
-    sentFinalRef.current = false;
+    if (!options.preserveDraft) clearSpeechDraft();
     suppressRecognitionEndRef.current = false;
     recognitionRef.current.onresult = (event: any) => {
       let finalText = '';
@@ -1033,13 +1134,25 @@ export default function VoiceAssistantPage() {
         if (event.results[i].isFinal) finalText += transcript;
         else interimText += transcript;
       }
-      setInput(finalText || interimText);
-      if (finalText.trim() && !sentFinalRef.current) {
-        sentFinalRef.current = true;
-        suppressRecognitionEndRef.current = true;
-        recognitionRef.current.stop();
-        stopMicMeter();
-        sendMessage(finalText);
+
+      if (interimText.trim()) {
+        clearSpeechCommitTimer();
+        interimTranscriptRef.current = interimText;
+        updateSpeechDraftInput();
+        if (pendingFinalTranscriptRef.current.trim()) {
+          setNotice('我还在听，您可以继续把这句话说完。');
+        }
+      }
+
+      if (finalText.trim()) {
+        const nextFinal = [pendingFinalTranscriptRef.current, finalText]
+          .map(part => part.trim())
+          .filter(Boolean)
+          .join(' ');
+        pendingFinalTranscriptRef.current = nextFinal;
+        interimTranscriptRef.current = '';
+        updateSpeechDraftInput();
+        scheduleSpeechCommit();
       }
     };
     recognitionRef.current.onerror = (event: any) => {
@@ -1059,8 +1172,31 @@ export default function VoiceAssistantPage() {
       setVoiceState('error');
     };
     recognitionRef.current.onend = () => {
+      recognitionActiveRef.current = false;
       setIsRecording(false);
       stopMicMeter();
+      if (
+        !suppressRecognitionEndRef.current
+        && callActiveRef.current
+        && autoConversationRef.current
+        && realtimeFallbackModeRef.current
+        && voiceStateRef.current === 'listening'
+        && pendingFinalTranscriptRef.current.trim()
+      ) {
+        clearRecognitionRestartTimer();
+        recognitionRestartTimerRef.current = window.setTimeout(() => {
+          if (
+            callActiveRef.current
+            && autoConversationRef.current
+            && realtimeFallbackModeRef.current
+            && voiceStateRef.current === 'listening'
+            && pendingFinalTranscriptRef.current.trim()
+          ) {
+            startListening({ auto: true, preserveDraft: true });
+          }
+        }, SPEECH_RESTART_DELAY_MS);
+        return;
+      }
       if (voiceStateRef.current === 'listening' && !suppressRecognitionEndRef.current) {
         setVoiceState(options.auto ? 'listening' : 'idle');
       }
@@ -1069,9 +1205,12 @@ export default function VoiceAssistantPage() {
     startMicMeter().catch(() => {});
     try {
       recognitionRef.current.start();
+      recognitionActiveRef.current = true;
       setIsRecording(true);
       setVoiceState('listening');
+      setNotice(options.preserveDraft ? '我还在听，短暂停顿不会马上发送。' : '正在听您说。停顿约 1.6 秒后会自动发送，也可以点麦克风手动发送。');
     } catch {
+      recognitionActiveRef.current = false;
       setNotice('语音识别正在启动，请稍等一秒再试。');
     }
   };
@@ -1080,8 +1219,10 @@ export default function VoiceAssistantPage() {
     callActiveRef.current = false;
     activeTurnIdRef.current += 1;
     messageAbortRef.current?.abort();
+    clearSpeechDraft();
     clearAssistantDisplayQueue();
     recognitionRef.current?.abort?.();
+    recognitionActiveRef.current = false;
     stopSpeakingNow();
     stopBargeInMonitor();
     await stopRealtimeCapture(false);
@@ -1239,7 +1380,7 @@ export default function VoiceAssistantPage() {
           <button
             className={`${styles.micButton} ${isRecording ? styles.micButtonActive : ''}`}
             onClick={() => startListening()}
-            disabled={voiceState === 'thinking' || voiceState === 'booting'}
+            disabled={voiceState === 'booting'}
             title={isRecording ? '停止听' : voiceState === 'speaking' ? '打断并说话' : '开始说话'}
           >
             <Mic size={34} />

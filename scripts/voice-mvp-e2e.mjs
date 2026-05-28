@@ -274,6 +274,16 @@ async function staticFrontendChecks() {
   expect(standalonePageSource.includes('speechQueueRef'), '独立页面使用服务端高音色 TTS 分句队列');
   expect(standalonePageSource.includes('/api/voice/tts'), '独立页面通过服务端高音色 TTS fallback 播放语音');
   expect(!standalonePageSource.includes('new SpeechSynthesisUtterance'), '独立页面不再把浏览器 SpeechSynthesis 作为正式语音输出');
+  expect(standalonePageSource.includes('SPEECH_COMMIT_DELAY_MS'), '独立页面为浏览器 ASR 保留停顿缓冲时间');
+  expect(standalonePageSource.includes('pendingFinalTranscriptRef'), '独立页面会累积多段 ASR final 结果');
+  expect(standalonePageSource.includes('scheduleSpeechCommit'), '独立页面不会在 0.3 秒短停顿后立刻发送');
+  expect(standalonePageSource.includes('flushSpeechCommit'), '独立页面支持手动或静默超时提交整段话');
+  expect(standalonePageSource.includes('recognitionRef.current.continuous = true'), '独立页面浏览器 ASR 使用 continuous 模式');
+  expect(!standalonePageSource.includes('sendMessage(finalText);'), '独立页面不再拿第一段 finalText 直接发给模型');
+  expect(standalonePageSource.includes("isSpeakingRef.current || voiceStateRef.current === 'thinking'"), '独立页面可在 thinking/speaking 阶段打断并继续说');
+  expect(!standalonePageSource.includes("disabled={voiceState === 'thinking' || voiceState === 'booting'}"), '独立页面 thinking 阶段麦克风不被禁用');
+  expect(standalonePageSource.includes('loadTtsStatus'), '独立页面启动时检查高音色 TTS 是否可用');
+  expect(standalonePageSource.includes('未配置高音色 TTS，所以不会出声'), '独立页面明确解释只出字幕没声音的原因');
   expect(ttsRouteSource.includes('synthesizeSpeech'), '服务端 TTS fallback 有独立 API 路由');
   expect(ttsConfigSource.includes('MINIMAX_TTS_MODEL') && ttsConfigSource.includes('speech-2.8-turbo'), '服务端 TTS fallback 优先支持 MiniMax Speech 2.8 Turbo');
   expect(minimaxTtsProviderSource.includes('task_continue'), 'MiniMax TTS provider 使用 WebSocket task_continue 发送文本');
