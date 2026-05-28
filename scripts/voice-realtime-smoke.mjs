@@ -150,10 +150,14 @@ async function runStaticContractChecks() {
   expect(voiceAssistantPageSource.includes('/api/voice/tts'), 'voice assistant page requests high-quality server-side TTS fallback');
   expect(!voiceAssistantPageSource.includes('new SpeechSynthesisUtterance'), 'voice assistant page no longer uses browser SpeechSynthesis as formal voice output');
   expect(voiceAssistantPageSource.includes('SPEECH_COMMIT_DELAY_MS'), 'voice assistant page keeps a configurable silence grace window before committing browser ASR');
+  expect(voiceAssistantPageSource.includes('const SPEECH_COMMIT_DELAY_MS = 1200'), 'voice assistant page commits browser ASR after roughly 1.2 seconds of silence');
+  expect(!voiceAssistantPageSource.includes('1.6 秒'), 'voice assistant page no longer tells users to wait 1.6 seconds before sending');
   expect(voiceAssistantPageSource.includes('pendingFinalTranscriptRef'), 'voice assistant page accumulates browser ASR final chunks before sending');
   expect(voiceAssistantPageSource.includes('scheduleSpeechCommit'), 'voice assistant page schedules delayed ASR commit instead of sending on first pause');
   expect(voiceAssistantPageSource.includes('flushSpeechCommit'), 'voice assistant page can flush accumulated speech manually or after silence');
   expect(voiceAssistantPageSource.includes('recognitionRef.current.continuous = true'), 'voice assistant page runs browser ASR in continuous mode');
+  expect(voiceAssistantPageSource.includes('recognitionRef.current.maxAlternatives = 3'), 'voice assistant page asks browser ASR for multiple alternatives');
+  expect(voiceAssistantPageSource.includes('pickBestSpeechRecognitionAlternative'), 'voice assistant page chooses the highest-confidence ASR alternative');
   expect(!voiceAssistantPageSource.includes('sendMessage(finalText);'), 'voice assistant page does not immediately send first browser ASR final result');
   expect(voiceAssistantPageSource.includes("isSpeakingRef.current || voiceStateRef.current === 'thinking'"), 'voice assistant page can interrupt a thinking or speaking turn before listening again');
   expect(!voiceAssistantPageSource.includes("disabled={voiceState === 'thinking' || voiceState === 'booting'}"), 'voice assistant mic is not disabled during thinking, so user can continue or correct themselves');

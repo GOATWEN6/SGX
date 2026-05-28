@@ -275,10 +275,14 @@ async function staticFrontendChecks() {
   expect(standalonePageSource.includes('/api/voice/tts'), '独立页面通过服务端高音色 TTS fallback 播放语音');
   expect(!standalonePageSource.includes('new SpeechSynthesisUtterance'), '独立页面不再把浏览器 SpeechSynthesis 作为正式语音输出');
   expect(standalonePageSource.includes('SPEECH_COMMIT_DELAY_MS'), '独立页面为浏览器 ASR 保留停顿缓冲时间');
+  expect(standalonePageSource.includes('const SPEECH_COMMIT_DELAY_MS = 1200'), '独立页面浏览器 ASR 静默提交时间约为 1.2 秒');
+  expect(!standalonePageSource.includes('1.6 秒'), '独立页面不再提示用户等待 1.6 秒');
   expect(standalonePageSource.includes('pendingFinalTranscriptRef'), '独立页面会累积多段 ASR final 结果');
   expect(standalonePageSource.includes('scheduleSpeechCommit'), '独立页面不会在 0.3 秒短停顿后立刻发送');
   expect(standalonePageSource.includes('flushSpeechCommit'), '独立页面支持手动或静默超时提交整段话');
   expect(standalonePageSource.includes('recognitionRef.current.continuous = true'), '独立页面浏览器 ASR 使用 continuous 模式');
+  expect(standalonePageSource.includes('recognitionRef.current.maxAlternatives = 3'), '独立页面浏览器 ASR 请求多个候选');
+  expect(standalonePageSource.includes('pickBestSpeechRecognitionAlternative'), '独立页面会优先采用最高置信度的 ASR 候选');
   expect(!standalonePageSource.includes('sendMessage(finalText);'), '独立页面不再拿第一段 finalText 直接发给模型');
   expect(standalonePageSource.includes("isSpeakingRef.current || voiceStateRef.current === 'thinking'"), '独立页面可在 thinking/speaking 阶段打断并继续说');
   expect(!standalonePageSource.includes("disabled={voiceState === 'thinking' || voiceState === 'booting'}"), '独立页面 thinking 阶段麦克风不被禁用');

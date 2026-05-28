@@ -58,8 +58,20 @@ const stateLabel: Record<VoiceState, string> = {
   error: '需要重试',
 };
 
-const SPEECH_COMMIT_DELAY_MS = 1600;
+const SPEECH_COMMIT_DELAY_MS = 1200;
+const SPEECH_COMMIT_DELAY_SECONDS = Math.round(SPEECH_COMMIT_DELAY_MS / 100) / 10;
 const SPEECH_RESTART_DELAY_MS = 180;
+
+function pickBestSpeechRecognitionAlternative(result: any) {
+  let bestAlternative = result?.[0];
+  for (let index = 1; index < (result?.length || 0); index += 1) {
+    const alternative = result[index];
+    if ((alternative?.confidence || 0) > (bestAlternative?.confidence || 0)) {
+      bestAlternative = alternative;
+    }
+  }
+  return String(bestAlternative?.transcript || '');
+}
 
 async function createTestUser(): Promise<string> {
   clearAuth();
@@ -263,7 +275,7 @@ export default function VoiceAssistantPage() {
     const pendingText = pendingFinalTranscriptRef.current.trim();
     if (!pendingText) return;
     clearSpeechCommitTimer();
-    setNotice(`我会在您停顿约 ${Math.round(SPEECH_COMMIT_DELAY_MS / 100) / 10} 秒后发送，您可以继续补充。`);
+    setNotice(`我会在您停顿约 ${SPEECH_COMMIT_DELAY_SECONDS} 秒后发送，您可以继续补充。`);
     speechCommitTimerRef.current = window.setTimeout(() => {
       void flushSpeechCommit('silence_timeout');
     }, SPEECH_COMMIT_DELAY_MS);
@@ -981,6 +993,7 @@ export default function VoiceAssistantPage() {
       recognitionRef.current.lang = 'zh-CN';
       recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
+      recognitionRef.current.maxAlternatives = 3;
     }
     boot();
     return () => {
@@ -1130,7 +1143,7 @@ export default function VoiceAssistantPage() {
       let finalText = '';
       let interimText = '';
       for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        const transcript = event.results[i][0].transcript;
+        const transcript = pickBestSpeechRecognitionAlternative(event.results[i]);
         if (event.results[i].isFinal) finalText += transcript;
         else interimText += transcript;
       }
@@ -1208,7 +1221,7 @@ export default function VoiceAssistantPage() {
       recognitionActiveRef.current = true;
       setIsRecording(true);
       setVoiceState('listening');
-      setNotice(options.preserveDraft ? '我还在听，短暂停顿不会马上发送。' : '正在听您说。停顿约 1.6 秒后会自动发送，也可以点麦克风手动发送。');
+      setNotice(options.preserveDraft ? '我还在听，短暂停顿不会马上发送。' : `正在听您说。停顿约 ${SPEECH_COMMIT_DELAY_SECONDS} 秒后会自动发送，也可以点麦克风手动发送。`);
     } catch {
       recognitionActiveRef.current = false;
       setNotice('语音识别正在启动，请稍等一秒再试。');
