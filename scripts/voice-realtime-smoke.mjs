@@ -38,6 +38,7 @@ async function runStaticContractChecks() {
     voiceAssistantPageSource,
     voiceTtsRouteSource,
     voiceTtsConfigSource,
+    doubaoTtsProviderSource,
     minimaxTtsProviderSource,
     llmClientSource,
     llmProviderSource,
@@ -58,6 +59,7 @@ async function runStaticContractChecks() {
     readText('src/app/voice-assistant/page.tsx'),
     readOptionalText('src/app/api/voice/tts/route.ts'),
     readOptionalText('src/lib/voice/tts/config.ts'),
+    readOptionalText('src/lib/voice/tts/doubao-provider.ts'),
     readOptionalText('src/lib/voice/tts/minimax-provider.ts'),
     readText('src/lib/llm/client.ts'),
     readText('src/lib/llm/providers/openai-compatible.ts'),
@@ -167,12 +169,18 @@ async function runStaticContractChecks() {
   expect(voiceAssistantPageSource.includes("isSpeakingRef.current || voiceStateRef.current === 'thinking'"), 'voice assistant page can interrupt a thinking or speaking turn before listening again');
   expect(!voiceAssistantPageSource.includes("disabled={voiceState === 'thinking' || voiceState === 'booting'}"), 'voice assistant mic is not disabled during thinking, so user can continue or correct themselves');
   expect(voiceAssistantPageSource.includes('loadTtsStatus'), 'voice assistant page checks high-quality TTS availability on boot');
-  expect(voiceAssistantPageSource.includes('未配置高音色 TTS，所以不会出声'), 'voice assistant page clearly explains no-sound fallback when TTS is missing');
+  expect(voiceAssistantPageSource.includes('未配置豆包高音色 TTS，所以不会出声'), 'voice assistant page clearly explains no-sound fallback when Doubao TTS is missing');
   expect(
     voiceAssistantPageSource.includes("body: JSON.stringify({ action: 'get' })"),
     'voice assistant page validates an existing local token before creating conversation sessions'
   );
   expect(voiceTtsRouteSource.includes('synthesizeSpeech'), 'voice TTS route calls the provider abstraction');
+  expect(voiceTtsConfigSource.includes('DOUBAO_TTS_API_KEY') && voiceTtsConfigSource.includes('seed-tts-1.0'), 'TTS config defaults to Doubao high-quality TTS fallback');
+  expect(voiceTtsConfigSource.includes('DOUBAO_TTS_SPEAKER') && voiceTtsConfigSource.includes('BV123_streaming'), 'TTS config exposes Doubao speaker selection');
+  expect(doubaoTtsProviderSource.includes('/api/v3/tts/unidirectional') || doubaoTtsProviderSource.includes('X-Api-Resource-Id'), 'Doubao TTS provider uses Volcengine V3 TTS request headers');
+  expect(doubaoTtsProviderSource.includes('req_params') && doubaoTtsProviderSource.includes('speaker'), 'Doubao TTS provider sends text and speaker through req_params');
+  expect(doubaoTtsProviderSource.includes("namespace: 'BidirectionalTTS'") && doubaoTtsProviderSource.includes('model: config.model'), 'Doubao TTS provider sends namespace and model in the V3 request body');
+  expect(doubaoTtsProviderSource.includes('parseConcatenatedJsonObjects'), 'Doubao TTS provider parses chunked JSON audio responses');
   expect(voiceTtsConfigSource.includes('MINIMAX_TTS_MODEL') && voiceTtsConfigSource.includes('speech-2.8-turbo'), 'TTS config supports MiniMax Speech 2.8 Turbo');
   expect(voiceTtsConfigSource.includes('MINIMAX_TTS_API_KEY'), 'TTS config supports MiniMax API key alias for local setup');
   expect(voiceTtsConfigSource.includes('wss://') && minimaxTtsProviderSource.includes('task_continue'), 'MiniMax TTS provider uses WebSocket streaming task events');

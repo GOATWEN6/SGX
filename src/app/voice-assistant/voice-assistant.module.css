@@ -127,7 +127,7 @@
 
 .animeAvatar {
   position: relative;
-  width: clamp(176px, 42vw, 246px);
+  width: clamp(194px, 45vw, 276px);
   aspect-ratio: 1;
   display: grid;
   place-items: center;
@@ -139,8 +139,10 @@
   inset: 8%;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 42% 25%, rgba(255, 255, 255, 0.96), rgba(199, 232, 255, 0.72) 52%, rgba(132, 195, 255, 0.48) 100%);
-  box-shadow: 0 18px 46px rgba(74, 125, 190, 0.22);
+    radial-gradient(circle at 42% 25%, rgba(255, 255, 255, 0.96), rgba(219, 236, 255, 0.76) 52%, rgba(150, 195, 255, 0.5) 100%);
+  box-shadow:
+    0 0 0 16px rgba(214, 232, 255, 0.38),
+    0 22px 54px rgba(74, 125, 190, 0.24);
   transform: scale(1);
   transition: transform 180ms ease, box-shadow 180ms ease;
   z-index: 0;
@@ -149,8 +151,8 @@
 .avatarFigure {
   position: relative;
   z-index: 1;
-  width: 82%;
-  height: 82%;
+  width: 90%;
+  height: 90%;
   transform-style: preserve-3d;
   filter: drop-shadow(0 22px 28px rgba(29, 45, 65, 0.22));
   animation: avatarFloat 4.8s ease-in-out infinite;
@@ -167,28 +169,103 @@
 
 .avatarBody {
   position: absolute;
-  left: 20%;
-  right: 20%;
-  bottom: 1%;
-  height: 34%;
-  border-radius: 44% 44% 16% 16%;
+  left: 12%;
+  right: 10%;
+  bottom: -1%;
+  height: 39%;
+  border-radius: 42% 42% 18% 18%;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 36%),
-    linear-gradient(180deg, #31465a 0%, #111b25 100%);
+    linear-gradient(115deg, #9ec7ff 0 33%, transparent 34%),
+    linear-gradient(245deg, #f9fcff 0 45%, #dfeafa 46% 100%);
   box-shadow:
-    inset -16px -18px 28px rgba(0, 0, 0, 0.18),
-    inset 14px 10px 24px rgba(255, 255, 255, 0.08),
-    0 18px 28px rgba(26, 42, 60, 0.18);
+    inset -18px -20px 34px rgba(75, 112, 164, 0.15),
+    inset 18px 12px 28px rgba(255, 255, 255, 0.68),
+    0 18px 30px rgba(26, 42, 60, 0.18);
+  overflow: hidden;
+}
+
+.avatarBody::before {
+  content: '';
+  position: absolute;
+  left: -1%;
+  top: 0;
+  width: 45%;
+  height: 100%;
+  border-radius: 48% 0 22% 18%;
+  background: linear-gradient(170deg, #bcd8ff 0%, #82aff0 100%);
+  box-shadow: inset 12px 10px 24px rgba(255, 255, 255, 0.4);
+}
+
+.avatarBody::after {
+  content: '';
+  position: absolute;
+  right: -1%;
+  top: 0;
+  width: 49%;
+  height: 100%;
+  border-radius: 0 48% 18% 22%;
+  background: linear-gradient(190deg, #ffffff 0%, #edf5ff 100%);
 }
 
 .avatarCollar {
   position: absolute;
-  left: 20%;
-  right: 20%;
-  top: 8%;
-  height: 34%;
-  border-bottom: 7px solid rgba(248, 252, 255, 0.9);
-  border-radius: 0 0 999px 999px;
+  left: 28%;
+  right: 26%;
+  top: -2%;
+  height: 42%;
+  border-radius: 12% 12% 50% 50%;
+  background: linear-gradient(180deg, #d5e7ff 0%, #8db9f3 100%);
+  box-shadow: inset 0 8px 16px rgba(255, 255, 255, 0.5);
+  z-index: 2;
+}
+
+.avatarInnerShirt {
+  position: absolute;
+  left: 34%;
+  top: 9%;
+  width: 28%;
+  height: 80%;
+  border-radius: 34% 34% 12% 12%;
+  background: linear-gradient(180deg, #222c3a 0%, #111823 100%);
+  z-index: 1;
+}
+
+.avatarChestLine {
+  position: absolute;
+  left: 48%;
+  top: 18%;
+  width: 3%;
+  height: 54%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #9dc7ff 0 58%, transparent 58% 72%, #9dc7ff 72% 100%);
+  z-index: 3;
+}
+
+.avatarHand {
+  position: absolute;
+  left: -3%;
+  bottom: 15%;
+  width: 23%;
+  height: 15%;
+  border-radius: 64% 46% 56% 44%;
+  background: linear-gradient(145deg, #ffe2cd 0%, #e9a986 100%);
+  box-shadow:
+    inset -8px -8px 14px rgba(145, 77, 60, 0.12),
+    0 12px 20px rgba(32, 49, 71, 0.16);
+  transform: rotate(-23deg);
+  z-index: 1;
+}
+
+.avatarHand::before {
+  content: '';
+  position: absolute;
+  left: -18%;
+  top: 34%;
+  width: 76%;
+  height: 15%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ffe7d7, #efb28f);
+  transform: rotate(11deg);
 }
 
 .avatarNeck {
@@ -205,31 +282,31 @@
 
 .avatarHairBack {
   position: absolute;
-  left: 18%;
-  top: 6%;
-  width: 64%;
-  height: 72%;
-  border-radius: 44% 44% 46% 46%;
+  left: 16%;
+  top: 2%;
+  width: 70%;
+  height: 68%;
+  border-radius: 48% 50% 44% 48%;
   background:
-    radial-gradient(circle at 30% 18%, rgba(115, 73, 50, 0.88), transparent 32%),
-    linear-gradient(145deg, #3c2018 0%, #5b3424 46%, #21110d 100%);
+    radial-gradient(circle at 34% 15%, rgba(112, 112, 142, 0.48), transparent 30%),
+    linear-gradient(145deg, #343341 0%, #1c1b25 52%, #090b10 100%);
   box-shadow:
-    inset 18px 10px 22px rgba(255, 255, 255, 0.1),
-    inset -20px -18px 28px rgba(0, 0, 0, 0.28),
-    0 18px 32px rgba(63, 34, 24, 0.22);
+    inset 20px 10px 24px rgba(255, 255, 255, 0.08),
+    inset -24px -20px 32px rgba(0, 0, 0, 0.34),
+    0 18px 34px rgba(28, 31, 48, 0.24);
   z-index: 1;
 }
 
 .avatarHead {
   position: absolute;
   left: 24%;
-  top: 14%;
-  width: 52%;
-  height: 56%;
+  top: 17%;
+  width: 53%;
+  height: 55%;
   border-radius: 46% 46% 48% 48%;
   background:
-    radial-gradient(circle at 35% 20%, rgba(255, 245, 234, 0.9), transparent 34%),
-    linear-gradient(160deg, #ffdec4 0%, #f2ad84 70%, #d98970 100%);
+    radial-gradient(circle at 36% 20%, rgba(255, 248, 238, 0.94), transparent 34%),
+    linear-gradient(160deg, #ffe4ce 0%, #f5b18d 70%, #db8b70 100%);
   box-shadow:
     inset -16px -18px 24px rgba(125, 66, 55, 0.16),
     inset 10px 8px 18px rgba(255, 255, 255, 0.32),
@@ -272,24 +349,45 @@
 
 .avatarHairCap {
   position: absolute;
-  left: -1%;
-  right: -1%;
-  top: -9%;
-  height: 42%;
-  border-radius: 56% 56% 38% 38%;
+  left: -10%;
+  right: -7%;
+  top: -16%;
+  height: 51%;
+  border-radius: 58% 60% 34% 38%;
   background:
-    radial-gradient(circle at 28% 14%, rgba(135, 86, 58, 0.76), transparent 28%),
-    linear-gradient(145deg, #4a281d 0%, #2b1712 100%);
-  box-shadow: inset 14px 8px 18px rgba(255, 255, 255, 0.08);
+    radial-gradient(circle at 35% 12%, rgba(122, 122, 154, 0.5), transparent 25%),
+    linear-gradient(145deg, #333240 0%, #12131b 100%);
+  box-shadow: inset 18px 9px 20px rgba(255, 255, 255, 0.08);
+}
+
+.avatarHairCap::before,
+.avatarHairCap::after {
+  content: '';
+  position: absolute;
+  top: -16%;
+  width: 34%;
+  height: 44%;
+  border-radius: 68% 24% 70% 32%;
+  background: linear-gradient(145deg, #3a3948, #11131d);
+}
+
+.avatarHairCap::before {
+  left: 8%;
+  transform: rotate(-23deg);
+}
+
+.avatarHairCap::after {
+  right: 17%;
+  transform: rotate(23deg);
 }
 
 .avatarFringeLeft,
 .avatarFringeRight {
   position: absolute;
-  top: -1%;
-  height: 35%;
-  background: linear-gradient(150deg, #4b291d, #22110d);
-  box-shadow: 0 7px 10px rgba(50, 28, 18, 0.12);
+  top: -2%;
+  height: 38%;
+  background: linear-gradient(150deg, #333240, #11131a);
+  box-shadow: 0 7px 10px rgba(19, 21, 31, 0.16);
 }
 
 .avatarFringeLeft {
@@ -312,7 +410,7 @@
   width: 18%;
   height: 4%;
   border-radius: 999px;
-  background: rgba(47, 28, 21, 0.72);
+  background: rgba(42, 30, 25, 0.78);
 }
 
 .avatarBrowLeft {
@@ -333,8 +431,8 @@
   border-radius: 50%;
   background:
     radial-gradient(circle at 34% 24%, #ffffff 0 13%, transparent 15%),
-    radial-gradient(circle at 62% 66%, rgba(137, 98, 74, 0.82) 0 14%, transparent 15%),
-    linear-gradient(180deg, #25170f, #1b1110);
+    radial-gradient(circle at 62% 66%, rgba(96, 95, 116, 0.8) 0 14%, transparent 15%),
+    linear-gradient(180deg, #2d2a31, #120f12);
   box-shadow:
     inset 0 4px 8px rgba(255, 255, 255, 0.18),
     0 3px 8px rgba(65, 35, 28, 0.18);
@@ -366,7 +464,7 @@
   width: 19%;
   height: 10%;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(239, 124, 132, 0.33), transparent 72%);
+  background: radial-gradient(circle, rgba(248, 128, 136, 0.25), transparent 72%);
 }
 
 .avatarCheekLeft {

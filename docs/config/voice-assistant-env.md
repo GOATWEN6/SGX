@@ -42,8 +42,18 @@
 
 | 变量 | 必填 | 示例/默认 | 含义 |
 |---|---:|---|---|
-| `VOICE_TTS_PROVIDER` | 否 | `minimax` | 高音色 TTS fallback 供应商。当前可用值：`minimax`、`disabled`。`doubao` 已保留配置方向，但本轮不启用独立 TTS adapter。 |
-| `MINIMAX_API_KEY` | 是 | 不写入仓库 | MiniMax TTS WebSocket 鉴权。只放 `.env.local` 或部署 secret。 |
+| `VOICE_TTS_PROVIDER` | 否 | `doubao` | 高音色 TTS fallback 供应商。当前可用值：`doubao`、`minimax`、`disabled`。本阶段按你的要求默认走豆包。 |
+| `DOUBAO_TTS_ENDPOINT` | 否 | `https://openspeech.bytedance.com/api/v3/tts/unidirectional` | 豆包语音合成 V3 HTTP Chunked 单向流式接口。服务端收齐音频 chunk 后返回浏览器播放。 |
+| `DOUBAO_TTS_API_KEY` | 是 | 不写入仓库 | 新版火山控制台语音 API Key，对应上游 header `X-Api-Key`。只放 `.env.local` 或部署 secret。 |
+| `DOUBAO_TTS_RESOURCE_ID` | 是 | `seed-tts-1.0` | 上游 header `X-Api-Resource-Id`，决定模型版本和计费 SKU。必须与音色所属模型版本匹配。 |
+| `DOUBAO_TTS_SPEAKER` | 是 | `BV123_streaming` | 豆包 TTS 音色/说话人。默认选“阳光青年”方向，实际以控制台可用音色列表为准。 |
+| `DOUBAO_TTS_FORMAT` | 否 | `mp3` | 输出格式，可选 `mp3`、`wav`、`pcm`、`ogg_opus`。网页 fallback 建议先用 `mp3`。 |
+| `DOUBAO_TTS_SAMPLE_RATE` | 否 | `24000` | 输出采样率。 |
+| `DOUBAO_TTS_SPEED` | 否 | `0.95` | 语速。银发陪伴场景略慢一点更稳。 |
+| `DOUBAO_TTS_VOLUME` | 否 | `1` | 音量倍率。 |
+| `DOUBAO_TTS_PITCH` | 否 | `1` | 音高倍率。 |
+| `DOUBAO_TTS_SYNTHESIS_TIMEOUT_MS` | 否 | `12000` | 单段文本合成超时。 |
+| `MINIMAX_API_KEY` | 否 | 不写入仓库 | MiniMax TTS WebSocket 鉴权。只作为备选 provider，默认不再使用。 |
 | `MINIMAX_TTS_API_KEY` | 否 | 不写入仓库 | `MINIMAX_API_KEY` 的兼容别名。两者填一个即可，推荐用 `MINIMAX_API_KEY`。 |
 | `MINIMAX_TTS_ENDPOINT` | 否 | `wss://api.minimaxi.com/ws/v1/t2a_v2` | MiniMax WebSocket T2A v2 地址。中国站通常用 `api.minimaxi.com`；国际站官方示例常见 `api.minimax.io`，如果账号所属区域不同，用控制台文档里的 endpoint 覆盖。 |
 | `MINIMAX_TTS_MODEL` | 否 | `speech-2.8-turbo` | 优先选择 Turbo，目标是降低合成等待并保持较自然音色。 |
@@ -65,6 +75,9 @@
 - `VOLC_APP_KEY` -> `DOUBAO_REALTIME_APP_KEY`
 - `VOLC_RESOURCE_ID` -> `DOUBAO_REALTIME_RESOURCE_ID`
 - `VOLC_REALTIME_MODEL` -> `DOUBAO_REALTIME_MODEL`
+- `DOUBAO_API_KEY` / `VOLCENGINE_TTS_API_KEY` -> `DOUBAO_TTS_API_KEY`
+- `VOLCENGINE_TTS_RESOURCE_ID` -> `DOUBAO_TTS_RESOURCE_ID`
+- `VOLCENGINE_TTS_SPEAKER` -> `DOUBAO_TTS_SPEAKER`
 - `MINIMAX_TTS_API_KEY` -> `MINIMAX_API_KEY`
 
 ## 保护开关
@@ -89,7 +102,7 @@
 - 文本回复已新增 `/api/conversation/message/stream` SSE 接口；OpenAI-compatible/Volcengine Ark 文本模型走 `stream: true` 时，前端会再经过本地逐字队列显示，避免后端一次性 delta 时看起来“整段跳出”。
 - 流式接口不再发送“我先想一下”这类正式 delta。SSE 打开后只发送 UI-only `status` 事件，正式回复只来自模型或安全 fallback。
 - `/voice-assistant` 已增加 `turnId` 旧响应丢弃：新一轮开始会 abort 旧请求，旧流即使晚返回也不能继续改字幕、播报或写候选记忆。
-- Demo fallback 不再使用浏览器 `speechSynthesis` 音色；已新增 `/api/voice/tts` 服务端高音色 TTS fallback。未配置 MiniMax TTS 时页面只显示大字幕，不用浏览器劣质音色冒充正式效果。
+- Demo fallback 不再使用浏览器 `speechSynthesis` 音色；已新增 `/api/voice/tts` 服务端高音色 TTS fallback。默认 provider 已切换为豆包 TTS；未配置豆包 TTS 时页面只显示大字幕，不用浏览器劣质音色冒充正式效果。
 - 页面新增电话式 UI：自绘动漫 AI 形象、说话口型、聆听光环、麦克风音量波动、声纹条、挂断按钮、字幕开关和默认开启的自动打断开关。
 - 页面启动时会自动处理本地过期 token：如果 session 创建返回未登录，会重新创建测试用户并重试，避免页面一直停在“未登录或 token 已过期”。
 - 如果浏览器没有开放麦克风权限，自动打断会降级关闭并保留文字测试，不再把页面留在“需要重试”。

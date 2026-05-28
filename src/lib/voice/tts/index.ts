@@ -1,4 +1,5 @@
 import { getVoiceTtsConfig, getVoiceTtsConfigStatus } from './config';
+import { synthesizeWithDoubaoTts } from './doubao-provider';
 import { synthesizeWithMiniMaxTts } from './minimax-provider';
 import { VoiceTtsConfigStatus, VoiceTtsSynthesisInput, VoiceTtsSynthesisResult } from './types';
 
@@ -21,6 +22,14 @@ export async function synthesizeSpeech(input: VoiceTtsSynthesisInput): Promise<V
 
   if (config.provider === 'minimax') {
     const audio = await synthesizeWithMiniMaxTts(config, input.text);
+    return {
+      available: true,
+      audio,
+    };
+  }
+
+  if (config.provider === 'doubao') {
+    const audio = await synthesizeWithDoubaoTts(config, input.text);
     return {
       available: true,
       audio,

@@ -261,6 +261,7 @@ async function staticFrontendChecks() {
   const standaloneStreamRouteSource = await readFile(new URL('../src/app/api/conversation/message/stream/route.ts', import.meta.url), 'utf8');
   const ttsRouteSource = await readFile(new URL('../src/app/api/voice/tts/route.ts', import.meta.url), 'utf8').catch(() => '');
   const ttsConfigSource = await readFile(new URL('../src/lib/voice/tts/config.ts', import.meta.url), 'utf8').catch(() => '');
+  const doubaoTtsProviderSource = await readFile(new URL('../src/lib/voice/tts/doubao-provider.ts', import.meta.url), 'utf8').catch(() => '');
   const minimaxTtsProviderSource = await readFile(new URL('../src/lib/voice/tts/minimax-provider.ts', import.meta.url), 'utf8').catch(() => '');
   expect(standalonePageSource.includes('AI 语音助手'), '存在独立 AI 语音助手页面');
   expect(standalonePageSource.includes("body: JSON.stringify({ mode: 'web_voice_call', conversationType: 'ai_chat' })"), '独立页面启动 web_voice_call 对话');
@@ -287,9 +288,12 @@ async function staticFrontendChecks() {
   expect(standalonePageSource.includes("isSpeakingRef.current || voiceStateRef.current === 'thinking'"), '独立页面可在 thinking/speaking 阶段打断并继续说');
   expect(!standalonePageSource.includes("disabled={voiceState === 'thinking' || voiceState === 'booting'}"), '独立页面 thinking 阶段麦克风不被禁用');
   expect(standalonePageSource.includes('loadTtsStatus'), '独立页面启动时检查高音色 TTS 是否可用');
-  expect(standalonePageSource.includes('未配置高音色 TTS，所以不会出声'), '独立页面明确解释只出字幕没声音的原因');
+  expect(standalonePageSource.includes('未配置豆包高音色 TTS，所以不会出声'), '独立页面明确解释只出字幕没声音的原因');
   expect(ttsRouteSource.includes('synthesizeSpeech'), '服务端 TTS fallback 有独立 API 路由');
-  expect(ttsConfigSource.includes('MINIMAX_TTS_MODEL') && ttsConfigSource.includes('speech-2.8-turbo'), '服务端 TTS fallback 优先支持 MiniMax Speech 2.8 Turbo');
+  expect(ttsConfigSource.includes('DOUBAO_TTS_API_KEY') && ttsConfigSource.includes('seed-tts-1.0'), '服务端 TTS fallback 默认优先支持豆包 TTS');
+  expect(doubaoTtsProviderSource.includes('X-Api-Resource-Id') && doubaoTtsProviderSource.includes('req_params'), '豆包 TTS provider 使用火山 V3 TTS 请求头和 req_params');
+  expect(doubaoTtsProviderSource.includes("namespace: 'BidirectionalTTS'") && doubaoTtsProviderSource.includes('model: config.model'), '豆包 TTS provider 发送 namespace 和模型字段');
+  expect(ttsConfigSource.includes('MINIMAX_TTS_MODEL') && ttsConfigSource.includes('speech-2.8-turbo'), '服务端 TTS fallback 保留 MiniMax Speech 2.8 Turbo 备选');
   expect(minimaxTtsProviderSource.includes('task_continue'), 'MiniMax TTS provider 使用 WebSocket task_continue 发送文本');
   expect(standalonePageSource.includes('startMicMeter'), '独立页面包含麦克风音量波动检测');
   expect(standalonePageSource.includes('autoBargeInEnabled'), '独立页面把自动打断做成显式开关');

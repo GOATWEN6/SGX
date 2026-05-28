@@ -27,19 +27,19 @@
 
 ## TTS Fallback
 
-本轮已落地：服务端 MiniMax WebSocket TTS provider 骨架，前端不再使用浏览器 `speechSynthesis` 作为正式音色。
+本轮已落地：服务端豆包 TTS V3 HTTP Chunked provider 骨架，前端不再使用浏览器 `speechSynthesis` 作为正式音色。
 
-选择 MiniMax `speech-2.8-turbo` 的原因：
+选择豆包 TTS 作为默认 fallback 的原因：
+
+- 与主线 Doubao realtime provider 同属火山/豆包语音体系，后续账号、计费、音色管理更一致。
+- 官方语音合成 V3 支持 HTTP Chunked/SSE/WebSocket 多种接口，本阶段先用 HTTP Chunked 收齐音频后播放，下一阶段再升级为真正双向流式 TTS。
+- 默认音色走偏年轻、清亮的“阳光青年”方向；真实验收时必须用控制台里与 `DOUBAO_TTS_RESOURCE_ID` 匹配的 speaker。
+
+MiniMax `speech-2.8-turbo` 仍保留为备选的原因：
 
 - 官方文档标注它面向极速生成，并提供 WebSocket T2A v2。
-- WebSocket 事件模型简单：`task_start` -> `task_continue` -> 音频数据 -> `task_finish`，适合先作为 fallback。
-- 支持中文，默认先用官方示例音色 `male-qn-qingse` 验证链路，之后可按产品气质替换音色 ID。
-
-Doubao TTS 的位置：
-
-- 火山/豆包 TTS V3 有双向流式、单向流式、HTTP Chunked、SSE 等多个接口。
-- 如果主线 Doubao realtime provider 迟迟无法稳定，下一步可以优先接火山 TTS V3 双向流式，作为比 MiniMax 更贴近现有火山账号体系的 fallback。
-- 当前代码保留 `VOICE_TTS_PROVIDER=doubao` 状态说明，但未启用独立 Doubao TTS adapter，避免把未联调协议误标成可用。
+- WebSocket 事件模型简单：`task_start` -> `task_continue` -> 音频数据 -> `task_finish`，适合做横向对比。
+- 如果豆包 TTS 音色或鉴权暂时没有开通，仍可短期切回 MiniMax 做体验验证。
 
 ## 参考来源
 

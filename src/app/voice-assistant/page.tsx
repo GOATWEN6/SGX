@@ -399,7 +399,7 @@ export default function VoiceAssistantPage() {
     const status = result.data?.status;
     if (!status?.configured) {
       const missing = status?.missing?.length ? `缺少：${status.missing.join('、')}。` : '';
-      setNotice(`当前是浏览器 ASR + 字幕 fallback；未配置高音色 TTS，所以不会出声。${missing}配置 MiniMax TTS 或打通 Doubao realtime audio delta 后再验收声音。`);
+      setNotice(`当前是浏览器 ASR + 字幕 fallback；未配置豆包高音色 TTS，所以不会出声。${missing}配置 Doubao TTS 或打通 Doubao realtime audio delta 后再验收声音。`);
       return;
     }
     if (fallbackMode) {
@@ -982,7 +982,7 @@ export default function VoiceAssistantPage() {
     if (!result.data?.available || !result.data.audio) {
       if (!serverTtsUnavailableNotifiedRef.current) {
         serverTtsUnavailableNotifiedRef.current = true;
-        setNotice('高音色 TTS 未配置，本轮只显示大字幕；请配置 MiniMax 或豆包 TTS 后再验收音色。');
+        setNotice('豆包高音色 TTS 未配置，本轮只显示大字幕；请补齐 Doubao TTS 参数后再验收音色。');
       }
       return null;
     }
@@ -1497,8 +1497,11 @@ export default function VoiceAssistantPage() {
           >
             <div className={styles.avatarGlow} />
             <div className={styles.avatarFigure}>
+              <div className={styles.avatarHand} />
               <div className={styles.avatarBody}>
                 <div className={styles.avatarCollar} />
+                <div className={styles.avatarInnerShirt} />
+                <div className={styles.avatarChestLine} />
               </div>
               <div className={styles.avatarNeck} />
               <div className={styles.avatarHairBack} />

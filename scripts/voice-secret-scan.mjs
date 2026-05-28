@@ -34,7 +34,7 @@ const secretPatterns = [
   },
   {
     name: 'api-key-assignment',
-    pattern: /\b(?:DOUBAO|VOLCENGINE|OPENAI|LLM|SEARCH|QWEN|ZHIPU|SILICONFLOW|MINIMAX)_API_KEY\s*=\s*["']?[A-Za-z0-9._-]{12,}/g
+    pattern: /\b(?:DOUBAO(?:_[A-Z0-9]+)*|VOLCENGINE(?:_[A-Z0-9]+)*|OPENAI|LLM|SEARCH|QWEN|ZHIPU|SILICONFLOW|MINIMAX(?:_[A-Z0-9]+)*)_API_KEY\s*=\s*["']?[A-Za-z0-9._-]{12,}/g
   },
   {
     name: 'provider-secret-assignment',
