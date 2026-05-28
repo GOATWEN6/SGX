@@ -13,8 +13,11 @@ export interface VoiceTtsConfigStatus {
   configured: boolean;
   provider: VoiceTtsProviderName;
   missing: string[];
+  endpoint?: string;
   model?: string;
   voiceId?: string;
+  outputFormat?: string;
+  sampleRate?: number;
 }
 
 export interface VoiceTtsSynthesisInput {

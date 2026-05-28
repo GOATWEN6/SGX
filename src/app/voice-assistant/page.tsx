@@ -61,6 +61,24 @@ const stateLabel: Record<VoiceState, string> = {
 const SPEECH_COMMIT_DELAY_MS = 1200;
 const SPEECH_COMMIT_DELAY_SECONDS = Math.round(SPEECH_COMMIT_DELAY_MS / 100) / 10;
 const SPEECH_RESTART_DELAY_MS = 180;
+const REALTIME_PCM_SAMPLE_RATE = 16000;
+const REALTIME_PCM_CHANNELS = 1;
+const REALTIME_PCM_CHUNK_MS = 120;
+const REALTIME_PCM_CHUNK_SAMPLES = Math.round((REALTIME_PCM_SAMPLE_RATE * REALTIME_PCM_CHUNK_MS) / 1000);
+const REALTIME_PCM_WORKLET_SOURCE = `
+class RealtimePcmProcessor extends AudioWorkletProcessor {
+  process(inputs) {
+    const channel = inputs[0] && inputs[0][0];
+    if (channel && channel.length) {
+      const copy = new Float32Array(channel.length);
+      copy.set(channel);
+      this.port.postMessage(copy, [copy.buffer]);
+    }
+    return true;
+  }
+}
+registerProcessor('realtime-pcm-processor', RealtimePcmProcessor);
+`;
 
 function pickBestSpeechRecognitionAlternative(result: any) {
   let bestAlternative = result?.[0];
@@ -100,18 +118,65 @@ async function createTestUser(): Promise<string> {
 }
 
 async function ensureTestUser(forceFresh = false): Promise<string> {
-  if (!forceFresh && getToken()) return 'existing';
+  if (!forceFresh && getToken()) {
+    try {
+      const response = await authenticatedFetch('/api/user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get' }),
+      });
+      const result = await response.json();
+      if (result.success && result.data?.user?.id) return result.data.user.id;
+    } catch {
+      // Fall through and create a clean local test user.
+    }
+  }
   return createTestUser();
 }
 
-async function blobToBase64(blob: Blob): Promise<string> {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
+function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
   const chunkSize = 0x8000;
   for (let index = 0; index < bytes.length; index += chunkSize) {
     binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
   }
   return window.btoa(binary);
+}
+
+function pcm16ToBase64(samples: Int16Array): string {
+  return bytesToBase64(new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength));
+}
+
+function downsampleFloat32(input: Float32Array, sourceSampleRate: number, targetSampleRate: number): Float32Array {
+  if (sourceSampleRate === targetSampleRate) return new Float32Array(input);
+  if (sourceSampleRate < targetSampleRate) return new Float32Array(input);
+
+  const ratio = sourceSampleRate / targetSampleRate;
+  const outputLength = Math.max(1, Math.floor(input.length / ratio));
+  const output = new Float32Array(outputLength);
+
+  for (let outputIndex = 0; outputIndex < outputLength; outputIndex += 1) {
+    const start = Math.floor(outputIndex * ratio);
+    const end = Math.min(input.length, Math.floor((outputIndex + 1) * ratio));
+    let sum = 0;
+    let count = 0;
+    for (let inputIndex = start; inputIndex < end; inputIndex += 1) {
+      sum += input[inputIndex];
+      count += 1;
+    }
+    output[outputIndex] = count > 0 ? sum / count : input[start] || 0;
+  }
+
+  return output;
+}
+
+function float32ToPcm16(input: Float32Array): Int16Array {
+  const output = new Int16Array(input.length);
+  for (let index = 0; index < input.length; index += 1) {
+    const sample = Math.max(-1, Math.min(1, input[index]));
+    output[index] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+  }
+  return output;
 }
 
 function base64ToBlob(base64Audio: string, mimeType: string): Blob {
@@ -195,10 +260,17 @@ export default function VoiceAssistantPage() {
   const vadNoiseFloorRef = useRef(0.025);
   const vadStartedAtRef = useRef(0);
   const lastAutoInterruptAtRef = useRef(0);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const realtimeStreamRef = useRef<MediaStream | null>(null);
+  const realtimePcmStreamRef = useRef<MediaStream | null>(null);
+  const realtimePcmContextRef = useRef<AudioContext | null>(null);
+  const realtimePcmSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const realtimePcmWorkletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const realtimePcmProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const realtimePcmSinkRef = useRef<GainNode | null>(null);
+  const realtimePcmWorkletUrlRef = useRef<string | null>(null);
+  const realtimePcmQueuedBuffersRef = useRef<Float32Array[]>([]);
+  const realtimePcmQueuedSampleCountRef = useRef(0);
+  const realtimeUploadPromisesRef = useRef<Promise<void>[]>([]);
   const realtimeChunkSequenceRef = useRef(0);
-  const realtimeMimeTypeRef = useRef('audio/webm');
   const lastProviderForwardReasonRef = useRef('');
   const serverTtsUnavailableNotifiedRef = useRef(false);
   const audioQueueRef = useRef<RealtimeAudioDelta[]>([]);
@@ -316,6 +388,9 @@ export default function VoiceAssistantPage() {
           provider?: string;
           model?: string;
           voiceId?: string;
+          missing?: string[];
+          sampleRate?: number;
+          outputFormat?: string;
         };
       };
     };
@@ -323,11 +398,12 @@ export default function VoiceAssistantPage() {
 
     const status = result.data?.status;
     if (!status?.configured) {
-      setNotice('当前是浏览器 ASR + 字幕 fallback；未配置高音色 TTS，所以不会出声。配置 MiniMax TTS 或打通 Doubao realtime audio delta 后再验收声音。');
+      const missing = status?.missing?.length ? `缺少：${status.missing.join('、')}。` : '';
+      setNotice(`当前是浏览器 ASR + 字幕 fallback；未配置高音色 TTS，所以不会出声。${missing}配置 MiniMax TTS 或打通 Doubao realtime audio delta 后再验收声音。`);
       return;
     }
     if (fallbackMode) {
-      setNotice(`当前是浏览器 ASR + ${status.provider || 'server'} 高音色 TTS fallback，模型：${status.model || '默认模型'}，音色：${status.voiceId || '默认音色'}。`);
+      setNotice(`当前是浏览器 ASR + ${status.provider || 'server'} 高音色 TTS fallback，模型：${status.model || '默认模型'}，音色：${status.voiceId || '默认音色'}，输出：${status.outputFormat || '默认格式'} / ${status.sampleRate || '默认'}Hz。`);
     }
   };
 
@@ -518,11 +594,18 @@ export default function VoiceAssistantPage() {
     });
   };
 
-  const appendRealtimeAudioChunk = async (blob: Blob) => {
+  const trackRealtimeUpload = (promise: Promise<void>) => {
+    realtimeUploadPromisesRef.current.push(promise);
+    promise.finally(() => {
+      const index = realtimeUploadPromisesRef.current.indexOf(promise);
+      if (index >= 0) realtimeUploadPromisesRef.current.splice(index, 1);
+    });
+  };
+
+  const appendRealtimePcm16Chunk = async (samples: Int16Array, durationMs: number) => {
     const activeRealtimeSessionId = realtimeSessionIdRef.current;
     if (!activeRealtimeSessionId) return;
 
-    const base64Audio = await blobToBase64(blob);
     const response = await authenticatedFetch('/api/voice/realtime', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -531,13 +614,13 @@ export default function VoiceAssistantPage() {
         realtimeSessionId: activeRealtimeSessionId,
         chunk: {
           sequence: realtimeChunkSequenceRef.current,
-          base64Audio,
+          base64Audio: pcm16ToBase64(samples),
           format: {
-            codec: realtimeMimeTypeRef.current.includes('opus') ? 'opus' : 'webm',
-            sampleRate: 48000,
-            channels: 1,
+            codec: 'pcm16',
+            sampleRate: REALTIME_PCM_SAMPLE_RATE,
+            channels: REALTIME_PCM_CHANNELS,
           },
-          durationMs: 250,
+          durationMs,
           capturedAt: new Date().toISOString(),
         },
       }),
@@ -555,6 +638,63 @@ export default function VoiceAssistantPage() {
     }
     enqueueRealtimeAudio(result.data?.audioDeltas);
     applyRealtimeTextDeltas(result.data?.textDeltas);
+  };
+
+  const takeRealtimePcmSamples = (sampleCount: number): Float32Array => {
+    const output = new Float32Array(sampleCount);
+    let outputOffset = 0;
+
+    while (outputOffset < sampleCount && realtimePcmQueuedBuffersRef.current.length > 0) {
+      const head = realtimePcmQueuedBuffersRef.current[0];
+      const needed = sampleCount - outputOffset;
+      const take = Math.min(needed, head.length);
+      output.set(head.subarray(0, take), outputOffset);
+      outputOffset += take;
+
+      if (take === head.length) {
+        realtimePcmQueuedBuffersRef.current.shift();
+      } else {
+        realtimePcmQueuedBuffersRef.current[0] = head.subarray(take);
+      }
+    }
+
+    realtimePcmQueuedSampleCountRef.current = Math.max(0, realtimePcmQueuedSampleCountRef.current - sampleCount);
+    return output;
+  };
+
+  const queueRealtimePcmUpload = (samples: Float32Array) => {
+    const pcm16 = float32ToPcm16(samples);
+    const durationMs = Math.round((pcm16.length / REALTIME_PCM_SAMPLE_RATE) * 1000);
+    const upload = appendRealtimePcm16Chunk(pcm16, durationMs).catch(error => {
+      setVoiceState('error');
+      setNotice(error instanceof Error ? error.message : '实时 PCM16 音频上传失败。');
+    });
+    trackRealtimeUpload(upload);
+  };
+
+  const appendRealtimePcmSamples = (samples: Float32Array) => {
+    if (!samples.length || !callActiveRef.current) return;
+    realtimePcmQueuedBuffersRef.current.push(samples);
+    realtimePcmQueuedSampleCountRef.current += samples.length;
+
+    while (realtimePcmQueuedSampleCountRef.current >= REALTIME_PCM_CHUNK_SAMPLES) {
+      queueRealtimePcmUpload(takeRealtimePcmSamples(REALTIME_PCM_CHUNK_SAMPLES));
+    }
+  };
+
+  const flushRealtimePcmTail = () => {
+    const sampleCount = realtimePcmQueuedSampleCountRef.current;
+    if (sampleCount < Math.round(REALTIME_PCM_SAMPLE_RATE * 0.04)) {
+      realtimePcmQueuedBuffersRef.current = [];
+      realtimePcmQueuedSampleCountRef.current = 0;
+      return;
+    }
+    queueRealtimePcmUpload(takeRealtimePcmSamples(sampleCount));
+  };
+
+  const handleRealtimePcmInput = (samples: Float32Array, sourceSampleRate: number) => {
+    const downsampled = downsampleFloat32(samples, sourceSampleRate, REALTIME_PCM_SAMPLE_RATE);
+    appendRealtimePcmSamples(downsampled);
   };
 
   const stopRealtimeOutputPolling = () => {
@@ -597,12 +737,30 @@ export default function VoiceAssistantPage() {
   };
 
   const stopRealtimeCapture = async (commitTurn = true) => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
+    realtimePcmWorkletNodeRef.current?.port.close();
+    realtimePcmWorkletNodeRef.current?.disconnect();
+    realtimePcmWorkletNodeRef.current = null;
+    realtimePcmProcessorRef.current?.disconnect();
+    realtimePcmProcessorRef.current = null;
+    realtimePcmSourceRef.current?.disconnect();
+    realtimePcmSourceRef.current = null;
+    realtimePcmSinkRef.current?.disconnect();
+    realtimePcmSinkRef.current = null;
+    if (realtimePcmWorkletUrlRef.current) {
+      URL.revokeObjectURL(realtimePcmWorkletUrlRef.current);
+      realtimePcmWorkletUrlRef.current = null;
     }
-    mediaRecorderRef.current = null;
-    realtimeStreamRef.current?.getTracks().forEach(track => track.stop());
-    realtimeStreamRef.current = null;
+    realtimePcmStreamRef.current?.getTracks().forEach(track => track.stop());
+    realtimePcmStreamRef.current = null;
+    await realtimePcmContextRef.current?.close().catch(() => {});
+    realtimePcmContextRef.current = null;
+    if (commitTurn) {
+      flushRealtimePcmTail();
+      await Promise.allSettled(realtimeUploadPromisesRef.current);
+    } else {
+      realtimePcmQueuedBuffersRef.current = [];
+      realtimePcmQueuedSampleCountRef.current = 0;
+    }
     stopMicMeter();
     setIsRecording(false);
     if (voiceStateRef.current === 'listening') setVoiceState(commitTurn ? 'thinking' : 'idle');
@@ -614,44 +772,77 @@ export default function VoiceAssistantPage() {
       setNotice('当前浏览器不能采集实时音频，请先用文字或浏览器语音识别测试。');
       return;
     }
-    if (mediaRecorderRef.current?.state === 'recording') {
+    if (realtimePcmContextRef.current) {
       await stopRealtimeCapture(true);
       return;
     }
     if (isSpeakingRef.current) await interruptSpeech('user_speech');
 
+    const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextCtor) {
+      setNotice('当前浏览器不支持 Web Audio PCM16 采集，请先用文字或浏览器 ASR fallback 测试。');
+      return;
+    }
+
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: REALTIME_PCM_CHANNELS,
+        sampleRate: REALTIME_PCM_SAMPLE_RATE,
+      },
     });
-    const preferredMimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-      ? 'audio/webm;codecs=opus'
-      : 'audio/webm';
-    realtimeMimeTypeRef.current = preferredMimeType;
-    realtimeStreamRef.current = stream;
+    let context: AudioContext;
+    try {
+      context = new AudioContextCtor({ sampleRate: REALTIME_PCM_SAMPLE_RATE });
+    } catch {
+      context = new AudioContextCtor();
+    }
+    await context.resume().catch(() => {});
+
+    realtimePcmStreamRef.current = stream;
+    realtimePcmContextRef.current = context;
     await startMicMeter(stream);
-    const recorder = new MediaRecorder(stream, { mimeType: preferredMimeType });
-    mediaRecorderRef.current = recorder;
     realtimeChunkSequenceRef.current = 0;
+    realtimePcmQueuedBuffersRef.current = [];
+    realtimePcmQueuedSampleCountRef.current = 0;
+    realtimeUploadPromisesRef.current = [];
     lastProviderForwardReasonRef.current = '';
 
-    recorder.ondataavailable = event => {
-      if (event.data.size <= 0 || !callActiveRef.current) return;
-      appendRealtimeAudioChunk(event.data).catch(error => {
-        setVoiceState('error');
-        setNotice(error instanceof Error ? error.message : '实时音频上传失败。');
-      });
-    };
-    recorder.onerror = () => {
-      setVoiceState('error');
-      setNotice('实时录音失败了，可以切回文字或刷新重试。');
-    };
-    recorder.onstop = () => {
-      setIsRecording(false);
-    };
-    recorder.start(250);
+    const source = context.createMediaStreamSource(stream);
+    const sink = context.createGain();
+    sink.gain.value = 0;
+    realtimePcmSourceRef.current = source;
+    realtimePcmSinkRef.current = sink;
+
+    if (context.audioWorklet) {
+      const workletUrl = URL.createObjectURL(new Blob([REALTIME_PCM_WORKLET_SOURCE], { type: 'application/javascript' }));
+      realtimePcmWorkletUrlRef.current = workletUrl;
+      await context.audioWorklet.addModule(workletUrl);
+      const workletNode = new AudioWorkletNode(context, 'realtime-pcm-processor');
+      workletNode.port.onmessage = event => {
+        if (!callActiveRef.current || !realtimePcmContextRef.current) return;
+        handleRealtimePcmInput(event.data as Float32Array, context.sampleRate);
+      };
+      realtimePcmWorkletNodeRef.current = workletNode;
+      source.connect(workletNode);
+      workletNode.connect(sink);
+    } else {
+      const processor = context.createScriptProcessor(4096, REALTIME_PCM_CHANNELS, REALTIME_PCM_CHANNELS);
+      processor.onaudioprocess = event => {
+        if (!callActiveRef.current || !realtimePcmContextRef.current) return;
+        handleRealtimePcmInput(event.inputBuffer.getChannelData(0), context.sampleRate);
+      };
+      realtimePcmProcessorRef.current = processor;
+      source.connect(processor);
+      processor.connect(sink);
+    }
+    sink.connect(context.destination);
+
     setIsRecording(true);
     setVoiceState('listening');
-    setNotice('正在把麦克风音频切片发送到服务端 realtime 链路。');
+    setNotice(`正在把麦克风 PCM16 ${REALTIME_PCM_SAMPLE_RATE / 1000}kHz 音频发送到 Doubao realtime 链路。`);
   };
 
   const startBargeInMonitor = async () => {
@@ -960,7 +1151,7 @@ export default function VoiceAssistantPage() {
             action: 'create',
             conversationSessionId: nextConversationId,
             connectProvider: true,
-            inputFormat: { codec: 'webm', sampleRate: 48000, channels: 1 },
+            inputFormat: { codec: 'pcm16', sampleRate: REALTIME_PCM_SAMPLE_RATE, channels: REALTIME_PCM_CHANNELS },
           }),
         });
         const realtimeResult = await realtimeResponse.json();

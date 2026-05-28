@@ -19,7 +19,9 @@
 | `DOUBAO_REALTIME_MODEL` | 否 | 供应商控制台模型名 | 记录当前使用的 realtime 语音模型，便于日志和 smoke 判断。 |
 | `DOUBAO_REALTIME_VOICE` | 否 | `zh_female_cancan` | 输出音色。不同控制台可能有不同可用音色，真实联调时以火山控制台为准。 |
 | `DOUBAO_REALTIME_SYSTEM_PROMPT` | 否 | 内置银发助手提示词 | realtime session 的系统提示词。不要写入隐私数据或密钥。 |
-| `DOUBAO_REALTIME_INPUT_AUDIO_FORMAT` | 否 | `opus` | 发送给上游的输入音频格式声明。当前浏览器采集为 `audio/webm;codecs=opus`，真实验收时要确认上游是否接受该容器或需要改成 PCM/AudioWorklet。 |
+| `DOUBAO_REALTIME_INPUT_AUDIO_FORMAT` | 否 | `pcm16` | 发送给上游的输入音频格式声明。当前 `/voice-assistant` 已改为浏览器 Web Audio / AudioWorklet 采集 PCM16，不再把 `audio/webm;codecs=opus` 容器直接转发给 provider。 |
+| `DOUBAO_REALTIME_INPUT_SAMPLE_RATE` | 否 | `16000` | 输入 PCM16 采样率。第一版用 16k 单声道，优先降低延迟和带宽。 |
+| `DOUBAO_REALTIME_INPUT_CHANNELS` | 否 | `1` | 输入声道数。网页电话式 MVP 固定单声道。 |
 | `DOUBAO_REALTIME_OUTPUT_AUDIO_FORMAT` | 否 | `ogg_opus` | 期望上游返回的音频格式。页面按该格式生成播放队列。 |
 | `DOUBAO_REALTIME_OUTPUT_SAMPLE_RATE` | 否 | `24000` | 输出音频采样率。 |
 | `DOUBAO_REALTIME_TEMPERATURE` | 否 | `0.4` | 对话生成温度，MVP 取偏稳妥，避免陪伴场景发散。 |
@@ -42,7 +44,8 @@
 |---|---:|---|---|
 | `VOICE_TTS_PROVIDER` | 否 | `minimax` | 高音色 TTS fallback 供应商。当前可用值：`minimax`、`disabled`。`doubao` 已保留配置方向，但本轮不启用独立 TTS adapter。 |
 | `MINIMAX_API_KEY` | 是 | 不写入仓库 | MiniMax TTS WebSocket 鉴权。只放 `.env.local` 或部署 secret。 |
-| `MINIMAX_TTS_ENDPOINT` | 否 | `wss://api.minimaxi.com/ws/v1/t2a_v2` | MiniMax WebSocket T2A v2 地址。 |
+| `MINIMAX_TTS_API_KEY` | 否 | 不写入仓库 | `MINIMAX_API_KEY` 的兼容别名。两者填一个即可，推荐用 `MINIMAX_API_KEY`。 |
+| `MINIMAX_TTS_ENDPOINT` | 否 | `wss://api.minimaxi.com/ws/v1/t2a_v2` | MiniMax WebSocket T2A v2 地址。中国站通常用 `api.minimaxi.com`；国际站官方示例常见 `api.minimax.io`，如果账号所属区域不同，用控制台文档里的 endpoint 覆盖。 |
 | `MINIMAX_TTS_MODEL` | 否 | `speech-2.8-turbo` | 优先选择 Turbo，目标是降低合成等待并保持较自然音色。 |
 | `MINIMAX_TTS_VOICE_ID` | 否 | `male-qn-qingse` | 音色 ID。默认采用 MiniMax 官方示例音色，真实验收时应在 MiniMax 控制台换成更适合银发陪伴的温和中文音色。 |
 | `MINIMAX_TTS_FORMAT` | 否 | `mp3` | 输出格式，可选 `mp3`、`wav`、`pcm`。浏览器 fallback 建议先用 `mp3`，兼容性最好。 |
@@ -62,6 +65,7 @@
 - `VOLC_APP_KEY` -> `DOUBAO_REALTIME_APP_KEY`
 - `VOLC_RESOURCE_ID` -> `DOUBAO_REALTIME_RESOURCE_ID`
 - `VOLC_REALTIME_MODEL` -> `DOUBAO_REALTIME_MODEL`
+- `MINIMAX_TTS_API_KEY` -> `MINIMAX_API_KEY`
 
 ## 保护开关
 
@@ -75,8 +79,8 @@
 
 当前代码已做到：
 
-- 浏览器可用 `MediaRecorder` 采集音频 chunk。
-- 前端把音频 chunk 发送到 `/api/voice/realtime`。
+- 浏览器已用 Web Audio / AudioWorklet 采集麦克风 PCM16 16k 单声道音频 chunk。
+- 前端把 PCM16 chunk 发送到 `/api/voice/realtime`。
 - 服务端创建 realtime session，保管 provider 凭证。
 - 服务端能构造火山官方 header，并具备带自定义 header 的上游 WebSocket 握手能力。
 - 服务端已新增 Doubao 二进制协议 codec/translator，并在保护开关打开时发送 `StartConnection`、`StartSession`、`TaskRequest`、`ClientInterrupt`。
@@ -92,7 +96,7 @@
 
 当前仍未宣称完成：
 
-- 官方真实 provider smoke。也就是在你的火山环境里确认 StartSession payload、音频容器、返回音频格式完全匹配。
+- 官方真实 provider smoke。也就是在你的火山环境里确认 StartSession payload、PCM16 输入、返回音频格式完全匹配。
 - provider audio delta 的真实播放质量和延迟。
 - 真实 10 轮电话式对话验收。
 - 自动智能打断的生产级方案。当前本地 RMS VAD 已默认开启并加入环境噪声校准、连续命中和冷却防抖，但仍只是浏览器端轻量方案；下一步应优先接 `@ricky0123/vad-web` 这类基于 Silero VAD + ONNX Runtime Web 的浏览器方案，再接 turn-taking/endpointing。

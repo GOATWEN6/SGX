@@ -299,6 +299,9 @@ async function staticFrontendChecks() {
   expect(standalonePageSource.includes('setAutoBargeInEnabled(false)'), '独立页面在自动打断无麦克风权限时会降级关闭');
   expect(standalonePageSource.includes('if (options.auto)') && standalonePageSource.includes("setVoiceState('idle')"), '独立页面自动续听失败不把页面留在错误态');
   expect(standalonePageSource.includes("action: 'append_audio'"), '独立页面会上传 realtime 音频 chunk');
+  expect(standalonePageSource.includes('REALTIME_PCM_SAMPLE_RATE = 16000'), '独立页面 realtime 主链路使用 16k PCM16 采集');
+  expect(standalonePageSource.includes('AudioWorkletNode') || standalonePageSource.includes('audioWorklet'), '独立页面优先使用 AudioWorklet 采集实时麦克风');
+  expect(standalonePageSource.includes("codec: 'pcm16'"), '独立页面上传 pcm16 音频而不是 WebM 容器');
   expect(standalonePageSource.includes("action: 'poll_output'"), '独立页面会轮询 provider audio delta');
   expect(standalonePageSource.includes('/api/memory/candidates/${candidateId}/${action}'), '独立页面支持候选记忆确认/拒绝');
   expect(standalonePageSource.includes('data-testid="anime-avatar"'), '独立页面渲染自绘动漫 AI 角色');
@@ -320,7 +323,7 @@ function printReport() {
   const failed = results.length - passed;
   const issues = [
     'Doubao 二进制协议 codec/translator 已接入，但真实 provider smoke 仍需要用户配置 DOUBAO_REALTIME_FORWARD_BINARY_PROTOCOL=true 后验收。',
-    '浏览器端当前用 MediaRecorder 输出 WebM/Opus chunk；如果上游只接受 raw Opus 或 PCM，需要下一步改 AudioWorklet PCM16。',
+    '浏览器端已改为 Web Audio / AudioWorklet PCM16 chunk；仍需用真实 Doubao realtime 凭证做 provider smoke 验收。',
     '浏览器端已把轻量 Web Audio VAD 做成试验性开关；真实智能打断仍需接入 WebRTC/Silero/LiveKit/Pipecat 类更可靠方案。',
     '联网工具默认未配置 SEARCH_API_ENDPOINT 时不会产生真实 citations，天气/新闻只能证明意图识别和安全降级。',
     'LLM 未配置时会走 fallback 回复，无法验证真实模型口语质量、追问质量和 prompt 遵循。',

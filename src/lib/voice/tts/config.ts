@@ -42,7 +42,7 @@ function readProvider(): VoiceTtsProviderName {
   if (provider === 'disabled' || provider === 'none' || provider === 'off') return 'disabled';
   if (provider === 'doubao') return 'doubao';
   if (provider === 'minimax') return 'minimax';
-  return readEnv('MINIMAX_API_KEY') ? 'minimax' : 'disabled';
+  return readEnv('MINIMAX_API_KEY', 'MINIMAX_TTS_API_KEY') ? 'minimax' : 'disabled';
 }
 
 function readOutputFormat(): 'mp3' | 'wav' | 'pcm' {
@@ -53,11 +53,22 @@ function readOutputFormat(): 'mp3' | 'wav' | 'pcm' {
 
 export function getVoiceTtsConfigStatus(): VoiceTtsConfigStatus {
   const provider = readProvider();
+  const endpoint = readEnv('MINIMAX_TTS_ENDPOINT') || DEFAULT_MINIMAX_ENDPOINT;
+  const model = readEnv('MINIMAX_TTS_MODEL') || DEFAULT_MINIMAX_MODEL;
+  const voiceId = readEnv('MINIMAX_TTS_VOICE_ID') || DEFAULT_MINIMAX_VOICE_ID;
+  const outputFormat = readOutputFormat();
+  const sampleRate = readNumber(32000, 'MINIMAX_TTS_SAMPLE_RATE');
+
   if (provider === 'disabled') {
     return {
       configured: false,
       provider,
-      missing: ['VOICE_TTS_PROVIDER=minimax and MINIMAX_API_KEY'],
+      missing: ['VOICE_TTS_PROVIDER=minimax', 'MINIMAX_API_KEY'],
+      endpoint,
+      model,
+      voiceId,
+      outputFormat,
+      sampleRate,
     };
   }
   if (provider === 'doubao') {
@@ -68,15 +79,16 @@ export function getVoiceTtsConfigStatus(): VoiceTtsConfigStatus {
     };
   }
 
-  const apiKey = readEnv('MINIMAX_API_KEY');
-  const model = readEnv('MINIMAX_TTS_MODEL') || DEFAULT_MINIMAX_MODEL;
-  const voiceId = readEnv('MINIMAX_TTS_VOICE_ID') || DEFAULT_MINIMAX_VOICE_ID;
+  const apiKey = readEnv('MINIMAX_API_KEY', 'MINIMAX_TTS_API_KEY');
   return {
     configured: Boolean(apiKey),
     provider,
     missing: apiKey ? [] : ['MINIMAX_API_KEY'],
+    endpoint,
     model,
     voiceId,
+    outputFormat,
+    sampleRate,
   };
 }
 
@@ -87,7 +99,7 @@ export function getVoiceTtsConfig(): VoiceTtsConfig | null {
   return {
     provider: 'minimax',
     endpoint: readEnv('MINIMAX_TTS_ENDPOINT') || DEFAULT_MINIMAX_ENDPOINT,
-    apiKey: readEnv('MINIMAX_API_KEY')!,
+    apiKey: readEnv('MINIMAX_API_KEY', 'MINIMAX_TTS_API_KEY')!,
     model: readEnv('MINIMAX_TTS_MODEL') || DEFAULT_MINIMAX_MODEL,
     voiceId: readEnv('MINIMAX_TTS_VOICE_ID') || DEFAULT_MINIMAX_VOICE_ID,
     outputFormat: readOutputFormat(),

@@ -70,9 +70,9 @@
     }
   ],
   "knownGaps": [
-    "Text replies stream through /api/conversation/message/stream, emit a fast acknowledgement if the first model token is slow, and then pass through a local typewriter queue so the UI visibly reveals characters even when one large delta arrives.",
+    "Text replies stream through /api/conversation/message/stream and pass through a local typewriter queue so the UI visibly reveals characters even when one large delta arrives.",
     "Doubao binary protocol is implemented behind DOUBAO_REALTIME_FORWARD_BINARY_PROTOCOL, but live provider smoke is still required.",
-    "Browser MediaRecorder currently sends WebM/Opus chunks; official provider may require raw Opus or PCM AudioWorklet conversion.",
+    "Browser realtime capture now sends PCM16 16k mono chunks through Web Audio / AudioWorklet; live provider smoke still needs to verify the official StartSession payload and audio delta playback.",
     "Provider audio/text delta polling exists, but true end-to-end playback quality, caption timing, and latency are not yet manually verified.",
     "Automatic barge-in is default-on with local RMS VAD, adaptive noise-floor calibration, consecutive-hit detection, and cooldown, but production should still use Silero/WebRTC VAD or LiveKit/Pipecat turn-taking.",
     "Text model activation must be smoke tested before judging assistant quality.",
@@ -85,7 +85,7 @@
     "Run JWT_SECRET=dev-build-secret npm run build.",
     "Run browser manual acceptance for streaming subtitles, queued TTS, mic meter, default voice-triggered interruption, and the anime call avatar.",
     "With user-approved env, run a live Doubao provider smoke using DOUBAO_REALTIME_FORWARD_BINARY_PROTOCOL=true.",
-    "If provider rejects WebM/Opus chunks, replace MediaRecorder upload with AudioWorklet PCM16 capture."
+    "With user-approved env, verify Doubao PCM16 input and provider audio delta playback against the official realtime endpoint."
   ],
   "currentEvidence": [
     "src/lib/voice/realtime/types.ts",
@@ -101,7 +101,7 @@
     "src/app/api/conversation/message/stream/route.ts",
     "src/lib/llm/client.ts#streamLLM",
     "src/lib/llm/providers/openai-compatible.ts#stream",
-    "src/app/voice-assistant/page.tsx#MediaRecorder",
+    "src/app/voice-assistant/page.tsx#REALTIME_PCM_SAMPLE_RATE",
     "src/app/voice-assistant/page.tsx#speechQueueRef",
     "src/app/voice-assistant/page.tsx#enqueueAssistantDisplayDelta",
     "src/app/voice-assistant/page.tsx#vadNoiseFloorRef",

@@ -10,6 +10,8 @@ export interface DoubaoRealtimeConfig {
   voice: string;
   systemPrompt: string;
   inputAudioFormat: 'pcm16' | 'opus' | 'webm';
+  inputSampleRate: number;
+  inputChannels: 1 | 2;
   outputAudioFormat: 'ogg_opus' | 'mp3' | 'pcm';
   outputMimeType: string;
   outputSampleRate: number;
@@ -73,6 +75,12 @@ function readOutputAudioFormat(): 'ogg_opus' | 'mp3' | 'pcm' {
   return 'ogg_opus';
 }
 
+function readInputAudioFormat(): 'pcm16' | 'opus' | 'webm' {
+  const value = readEnv('DOUBAO_REALTIME_INPUT_AUDIO_FORMAT');
+  if (value === 'opus' || value === 'webm') return value;
+  return 'pcm16';
+}
+
 function getOutputMimeType(format: 'ogg_opus' | 'mp3' | 'pcm'): string {
   if (format === 'mp3') return 'audio/mpeg';
   if (format === 'pcm') return 'audio/pcm';
@@ -117,7 +125,9 @@ export function getDoubaoRealtimeConfig(): DoubaoRealtimeConfig | null {
     model: status.model,
     voice: readEnv('DOUBAO_REALTIME_VOICE') || DEFAULT_VOICE,
     systemPrompt: readEnv('DOUBAO_REALTIME_SYSTEM_PROMPT') || DEFAULT_SYSTEM_PROMPT,
-    inputAudioFormat: readEnv('DOUBAO_REALTIME_INPUT_AUDIO_FORMAT') === 'pcm16' ? 'pcm16' : 'opus',
+    inputAudioFormat: readInputAudioFormat(),
+    inputSampleRate: readNumber(16000, 'DOUBAO_REALTIME_INPUT_SAMPLE_RATE'),
+    inputChannels: readNumber(1, 'DOUBAO_REALTIME_INPUT_CHANNELS') === 2 ? 2 : 1,
     outputAudioFormat,
     outputMimeType: getOutputMimeType(outputAudioFormat),
     outputSampleRate: readNumber(24000, 'DOUBAO_REALTIME_OUTPUT_SAMPLE_RATE'),

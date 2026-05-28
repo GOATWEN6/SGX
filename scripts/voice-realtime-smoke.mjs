@@ -100,6 +100,8 @@ async function runStaticContractChecks() {
   expect(doubaoConfigSource.includes('X-Api-App-Key'), 'Doubao config builds official app key header');
   expect(doubaoConfigSource.includes('X-Api-Resource-Id'), 'Doubao config builds official resource id header');
   expect(doubaoConfigSource.includes('volc.speech.dialog'), 'Doubao config defaults to realtime dialogue resource');
+  expect(doubaoConfigSource.includes("return 'pcm16'"), 'Doubao config defaults realtime input format to pcm16');
+  expect(doubaoConfigSource.includes("readNumber(16000, 'DOUBAO_REALTIME_INPUT_SAMPLE_RATE')"), 'Doubao config declares 16k default input sample rate');
   expect(doubaoConfigSource.includes('DOUBAO_REALTIME_FORWARD_BINARY_PROTOCOL'), 'Doubao config gates binary protocol forwarding');
   expect(doubaoConfigSource.includes('DOUBAO_REALTIME_SESSION_PARAMS_JSON'), 'Doubao config allows official session payload override');
   expect(doubaoCodecSource.includes('encodeDoubaoFrame'), 'Doubao codec encodes binary protocol frames');
@@ -136,7 +138,10 @@ async function runStaticContractChecks() {
   expect(conversationStreamRouteSource.includes('maxTokens: 320'), 'conversation stream route keeps voice replies bounded for latency');
   expect(llmClientSource.includes('streamLLM'), 'LLM client exposes streaming helper');
   expect(llmProviderSource.includes('stream: true'), 'OpenAI-compatible provider requests streaming completions');
-  expect(voiceAssistantPageSource.includes('MediaRecorder'), 'voice assistant page captures browser audio chunks');
+  expect(voiceAssistantPageSource.includes('REALTIME_PCM_SAMPLE_RATE = 16000'), 'voice assistant page captures 16k PCM audio chunks for realtime provider');
+  expect(voiceAssistantPageSource.includes('AudioWorkletNode') || voiceAssistantPageSource.includes('audioWorklet'), 'voice assistant page prefers AudioWorklet for realtime microphone capture');
+  expect(voiceAssistantPageSource.includes('createScriptProcessor'), 'voice assistant page keeps a Web Audio fallback when AudioWorklet is unavailable');
+  expect(voiceAssistantPageSource.includes("codec: 'pcm16'"), 'voice assistant page uploads pcm16 chunks instead of WebM containers');
   expect(voiceAssistantPageSource.includes("action: 'append_audio'"), 'voice assistant page sends realtime append_audio');
   expect(voiceAssistantPageSource.includes("action: 'poll_output'"), 'voice assistant page polls provider audio deltas');
   expect(voiceAssistantPageSource.includes('applyRealtimeTextDeltas'), 'voice assistant page updates captions from provider text deltas');
@@ -163,8 +168,13 @@ async function runStaticContractChecks() {
   expect(!voiceAssistantPageSource.includes("disabled={voiceState === 'thinking' || voiceState === 'booting'}"), 'voice assistant mic is not disabled during thinking, so user can continue or correct themselves');
   expect(voiceAssistantPageSource.includes('loadTtsStatus'), 'voice assistant page checks high-quality TTS availability on boot');
   expect(voiceAssistantPageSource.includes('未配置高音色 TTS，所以不会出声'), 'voice assistant page clearly explains no-sound fallback when TTS is missing');
+  expect(
+    voiceAssistantPageSource.includes("body: JSON.stringify({ action: 'get' })"),
+    'voice assistant page validates an existing local token before creating conversation sessions'
+  );
   expect(voiceTtsRouteSource.includes('synthesizeSpeech'), 'voice TTS route calls the provider abstraction');
   expect(voiceTtsConfigSource.includes('MINIMAX_TTS_MODEL') && voiceTtsConfigSource.includes('speech-2.8-turbo'), 'TTS config supports MiniMax Speech 2.8 Turbo');
+  expect(voiceTtsConfigSource.includes('MINIMAX_TTS_API_KEY'), 'TTS config supports MiniMax API key alias for local setup');
   expect(voiceTtsConfigSource.includes('wss://') && minimaxTtsProviderSource.includes('task_continue'), 'MiniMax TTS provider uses WebSocket streaming task events');
   expect(voiceAssistantPageSource.includes('autoBargeInEnabled'), 'voice assistant page gates experimental auto barge-in');
   expect(voiceAssistantPageSource.includes('useState(true);') && voiceAssistantPageSource.includes('setAutoBargeInEnabled'), 'voice assistant page enables auto barge-in by default');

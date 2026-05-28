@@ -67,8 +67,8 @@ function buildStartSessionPayload(sessionId: string, config: DoubaoRealtimeConfi
     audio: {
       input: {
         format: config.inputAudioFormat === 'pcm16' ? 'pcm16' : 'speech_opus',
-        sample_rate: 48000,
-        channels: 1,
+        sample_rate: config.inputSampleRate,
+        channels: config.inputChannels,
       },
       output: {
         format: config.outputAudioFormat,
