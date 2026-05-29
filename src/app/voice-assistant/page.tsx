@@ -346,7 +346,7 @@ export default function VoiceAssistantPage() {
   };
 
   const scheduleSpeechCommit = () => {
-    const pendingText = pendingFinalTranscriptRef.current.trim();
+    const pendingText = buildSpeechDraft();
     if (!pendingText) return;
     clearSpeechCommitTimer();
     setNotice(`我会在您停顿约 ${SPEECH_COMMIT_DELAY_SECONDS} 秒后发送，您可以继续补充。`);
@@ -358,7 +358,7 @@ export default function VoiceAssistantPage() {
   const flushSpeechCommit = async (reason: 'silence_timeout' | 'manual_stop' = 'silence_timeout') => {
     clearSpeechCommitTimer();
     clearRecognitionRestartTimer();
-    const text = pendingFinalTranscriptRef.current.trim() || input.trim();
+    const text = buildSpeechDraft() || input.trim();
     if (!text) {
       suppressRecognitionEndRef.current = true;
       recognitionActiveRef.current = false;
@@ -1341,6 +1341,7 @@ export default function VoiceAssistantPage() {
         clearSpeechCommitTimer();
         interimTranscriptRef.current = interimText;
         updateSpeechDraftInput();
+        scheduleSpeechCommit();
         if (pendingFinalTranscriptRef.current.trim()) {
           setNotice('我还在听，您可以继续把这句话说完。');
         }

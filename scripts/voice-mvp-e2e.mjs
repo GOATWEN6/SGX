@@ -280,6 +280,9 @@ async function staticFrontendChecks() {
   expect(!standalonePageSource.includes('1.6 秒'), '独立页面不再提示用户等待 1.6 秒');
   expect(standalonePageSource.includes('pendingFinalTranscriptRef'), '独立页面会累积多段 ASR final 结果');
   expect(standalonePageSource.includes('scheduleSpeechCommit'), '独立页面不会在 0.3 秒短停顿后立刻发送');
+  expect(standalonePageSource.includes('const pendingText = buildSpeechDraft();'), '独立页面 ASR 静默提交会同时检查 final 和 interim 文本');
+  expect(standalonePageSource.includes('const text = buildSpeechDraft() || input.trim();'), '独立页面静默发送不会丢掉只有 interim 的语音识别结果');
+  expect(standalonePageSource.includes('interimTranscriptRef.current = interimText;') && standalonePageSource.includes('scheduleSpeechCommit();'), '独立页面收到 interim 文本后也会安排静默提交');
   expect(standalonePageSource.includes('flushSpeechCommit'), '独立页面支持手动或静默超时提交整段话');
   expect(standalonePageSource.includes('recognitionRef.current.continuous = true'), '独立页面浏览器 ASR 使用 continuous 模式');
   expect(standalonePageSource.includes('recognitionRef.current.maxAlternatives = 3'), '独立页面浏览器 ASR 请求多个候选');
