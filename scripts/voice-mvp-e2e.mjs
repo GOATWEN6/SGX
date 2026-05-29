@@ -298,7 +298,8 @@ async function staticFrontendChecks() {
   expect(standalonePageSource.includes('startMicMeter'), '独立页面包含麦克风音量波动检测');
   expect(standalonePageSource.includes('autoBargeInEnabled'), '独立页面把自动打断做成显式开关');
   expect(standalonePageSource.includes('useState(true);') && standalonePageSource.includes('setAutoBargeInEnabled'), '独立页面默认开启自动语音打断');
-  expect(standalonePageSource.includes('vadNoiseFloorRef'), '独立页面使用自适应环境噪声阈值减少误打断');
+  expect(standalonePageSource.includes("import('@ricky0123/vad-web')") && standalonePageSource.includes('MicVAD.new'), '独立页面使用 @ricky0123/vad-web / Silero VAD 做自动语音打断');
+  expect(standalonePageSource.includes('positiveSpeechThreshold') && standalonePageSource.includes('redemptionMs'), '独立页面配置 Silero VAD 阈值和冷却参数减少误触发');
   expect(standalonePageSource.includes('lastAutoInterruptAtRef'), '独立页面对自动打断做冷却防抖');
   expect(standalonePageSource.includes('setAutoBargeInEnabled(false)'), '独立页面在自动打断无麦克风权限时会降级关闭');
   expect(standalonePageSource.includes('if (options.auto)') && standalonePageSource.includes("setVoiceState('idle')"), '独立页面自动续听失败不把页面留在错误态');
@@ -328,7 +329,7 @@ function printReport() {
   const issues = [
     'Doubao 二进制协议 codec/translator 已接入，但真实 provider smoke 仍需要用户配置 DOUBAO_REALTIME_FORWARD_BINARY_PROTOCOL=true 后验收。',
     '浏览器端已改为 Web Audio / AudioWorklet PCM16 chunk；仍需用真实 Doubao realtime 凭证做 provider smoke 验收。',
-    '浏览器端已把轻量 Web Audio VAD 做成试验性开关；真实智能打断仍需接入 WebRTC/Silero/LiveKit/Pipecat 类更可靠方案。',
+    '浏览器端已接入 @ricky0123/vad-web / Silero VAD；仍需用真实播放场景做 10 次语音打断验收并调参。',
     '联网工具默认未配置 SEARCH_API_ENDPOINT 时不会产生真实 citations，天气/新闻只能证明意图识别和安全降级。',
     'LLM 未配置时会走 fallback 回复，无法验证真实模型口语质量、追问质量和 prompt 遵循。',
     '记忆候选提取是规则型关键词，容易漏掉隐含偏好、复杂家庭关系和方言表达，也可能把长句误判为 quote。',

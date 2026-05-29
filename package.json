@@ -12,6 +12,7 @@
     "test:voice:secret": "node scripts/voice-secret-scan.mjs AGENTS.md docs harness scripts src"
   },
   "dependencies": {
+    "@ricky0123/vad-web": "^0.0.30",
     "date-fns": "^3.6.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.460.0",

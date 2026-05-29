@@ -47,6 +47,12 @@ interface RealtimeAppendResponse {
   };
 }
 
+type BargeInVadHandle = {
+  start: () => Promise<void>;
+  pause: () => Promise<void>;
+  destroy: () => Promise<void>;
+};
+
 const stateLabel: Record<VoiceState, string> = {
   booting: '正在准备',
   idle: '可以开始',
@@ -252,13 +258,9 @@ export default function VoiceAssistantPage() {
   const messageAbortRef = useRef<AbortController | null>(null);
   const activeTurnIdRef = useRef(0);
   const interruptTimeoutRef = useRef<number | null>(null);
-  const vadStreamRef = useRef<MediaStream | null>(null);
-  const vadContextRef = useRef<AudioContext | null>(null);
-  const vadAnalyserRef = useRef<AnalyserNode | null>(null);
-  const vadIntervalRef = useRef<number | null>(null);
-  const vadHitCountRef = useRef(0);
-  const vadNoiseFloorRef = useRef(0.025);
-  const vadStartedAtRef = useRef(0);
+  const bargeInVadRef = useRef<BargeInVadHandle | null>(null);
+  const bargeInStartingRef = useRef(false);
+  const bargeInSpeechStartCountRef = useRef(0);
   const lastAutoInterruptAtRef = useRef(0);
   const realtimePcmStreamRef = useRef<MediaStream | null>(null);
   const realtimePcmContextRef = useRef<AudioContext | null>(null);
@@ -439,24 +441,21 @@ export default function VoiceAssistantPage() {
   };
 
   const stopBargeInMonitor = () => {
-    if (vadIntervalRef.current !== null) {
-      window.clearInterval(vadIntervalRef.current);
-      vadIntervalRef.current = null;
+    const vad = bargeInVadRef.current;
+    bargeInVadRef.current = null;
+    bargeInStartingRef.current = false;
+    bargeInSpeechStartCountRef.current = 0;
+    if (vad) {
+      void vad.pause().catch(() => {});
+      void vad.destroy().catch(() => {});
     }
-    vadHitCountRef.current = 0;
-    vadStreamRef.current?.getTracks().forEach(track => track.stop());
-    vadStreamRef.current = null;
-    vadContextRef.current?.close().catch(() => {});
-    vadContextRef.current = null;
-    vadAnalyserRef.current = null;
-    vadNoiseFloorRef.current = 0.025;
-    vadStartedAtRef.current = 0;
   };
 
   const stopSpeakingNow = () => {
     speechQueueRef.current = [];
     speechBufferRef.current = '';
     isSpeechQueueActiveRef.current = false;
+    stopBargeInMonitor();
     clearRealtimePlayback();
     setIsSpeaking(false);
   };
@@ -846,60 +845,49 @@ export default function VoiceAssistantPage() {
   };
 
   const startBargeInMonitor = async () => {
-    if (!autoBargeInEnabled || !navigator.mediaDevices?.getUserMedia || vadIntervalRef.current !== null) return;
+    if (
+      !autoBargeInEnabled
+      || !navigator.mediaDevices?.getUserMedia
+      || bargeInVadRef.current
+      || bargeInStartingRef.current
+    ) return;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
-      const context = new AudioContextCtor();
-      const analyser = context.createAnalyser();
-      analyser.fftSize = 512;
-      context.createMediaStreamSource(stream).connect(analyser);
-      vadStreamRef.current = stream;
-      vadContextRef.current = context;
-      vadAnalyserRef.current = analyser;
-      vadNoiseFloorRef.current = 0.025;
-      vadStartedAtRef.current = Date.now();
-
-      const samples = new Uint8Array(analyser.fftSize);
-      vadIntervalRef.current = window.setInterval(() => {
-        if (!isSpeakingRef.current || voiceStateRef.current !== 'speaking') {
-          vadHitCountRef.current = 0;
-          return;
-        }
-        const elapsedFromAssistant = Date.now() - assistantSpeechStartedAtRef.current;
-        const elapsedFromVad = Date.now() - vadStartedAtRef.current;
-        if (elapsedFromAssistant < 900 || elapsedFromVad < 700) {
-          vadHitCountRef.current = 0;
-          analyser.getByteTimeDomainData(samples);
-          let calibrationSum = 0;
-          for (let i = 0; i < samples.length; i += 1) {
-            const centered = (samples[i] - 128) / 128;
-            calibrationSum += centered * centered;
+      bargeInStartingRef.current = true;
+      const { MicVAD } = await import('@ricky0123/vad-web');
+      const vad = await MicVAD.new({
+        model: 'v5',
+        startOnLoad: false,
+        processorType: 'AudioWorklet',
+        positiveSpeechThreshold: 0.78,
+        negativeSpeechThreshold: 0.45,
+        minSpeechMs: 180,
+        redemptionMs: 280,
+        preSpeechPadMs: 120,
+        getStream: () => navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: 1,
+          },
+        }),
+        onFrameProcessed: probabilities => {
+          if (!isSpeakingRef.current || voiceStateRef.current !== 'speaking') return;
+          const speechLevel = Math.max(0, Math.min(1, probabilities.isSpeech || 0));
+          setVoiceLevel(level => Math.max(level * 0.82, speechLevel));
+        },
+        onSpeechStart: () => {
+          if (!isSpeakingRef.current || voiceStateRef.current !== 'speaking') {
+            bargeInSpeechStartCountRef.current = 0;
+            return;
           }
-          const calibrationRms = Math.sqrt(calibrationSum / samples.length);
-          vadNoiseFloorRef.current = Math.max(0.018, vadNoiseFloorRef.current * 0.88 + calibrationRms * 0.12);
-          return;
-        }
-        analyser.getByteTimeDomainData(samples);
-        let sumSquares = 0;
-        for (let i = 0; i < samples.length; i += 1) {
-          const centered = (samples[i] - 128) / 128;
-          sumSquares += centered * centered;
-        }
-        const rms = Math.sqrt(sumSquares / samples.length);
-        const dynamicThreshold = Math.max(0.055, vadNoiseFloorRef.current * 2.8 + 0.025);
-        if (rms > dynamicThreshold) {
-          vadHitCountRef.current += 1;
-        } else {
-          vadHitCountRef.current = Math.max(0, vadHitCountRef.current - 1);
-          vadNoiseFloorRef.current = Math.max(0.018, vadNoiseFloorRef.current * 0.94 + rms * 0.06);
-        }
-        if (vadHitCountRef.current >= 4 && Date.now() - lastAutoInterruptAtRef.current > 1600) {
+          const elapsedFromAssistant = Date.now() - assistantSpeechStartedAtRef.current;
+          if (elapsedFromAssistant < 900) return;
+          if (Date.now() - lastAutoInterruptAtRef.current < 1600) return;
+          bargeInSpeechStartCountRef.current += 1;
+          if (bargeInSpeechStartCountRef.current < 1) return;
           lastAutoInterruptAtRef.current = Date.now();
-          vadHitCountRef.current = 0;
           stopBargeInMonitor();
           void interruptSpeech('user_speech').then(() => {
             setNotice('检测到您在说话，我已经停下，正在听您说。');
@@ -909,11 +897,21 @@ export default function VoiceAssistantPage() {
               }
             }, 220);
           });
-        }
-      }, 120);
+        },
+        onSpeechEnd: () => {
+          bargeInSpeechStartCountRef.current = 0;
+        },
+        onVADMisfire: () => {
+          bargeInSpeechStartCountRef.current = 0;
+        },
+      });
+      bargeInVadRef.current = vad;
+      bargeInStartingRef.current = false;
+      await vad.start();
     } catch {
+      bargeInStartingRef.current = false;
       setAutoBargeInEnabled(false);
-      setNotice('浏览器没有开放麦克风，自动语音打断暂时关闭；文字输入和手动麦克风仍可继续测试。');
+      setNotice('Silero VAD 没有启动成功，自动语音打断暂时关闭；文字输入和点击打断仍可继续测试。');
       stopBargeInMonitor();
     }
   };

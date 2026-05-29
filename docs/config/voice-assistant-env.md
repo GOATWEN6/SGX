@@ -112,4 +112,4 @@
 - 官方真实 provider smoke。也就是在你的火山环境里确认 StartSession payload、PCM16 输入、返回音频格式完全匹配。
 - provider audio delta 的真实播放质量和延迟。
 - 真实 10 轮电话式对话验收。
-- 自动智能打断的生产级方案。当前本地 RMS VAD 已默认开启并加入环境噪声校准、连续命中和冷却防抖，但仍只是浏览器端轻量方案；下一步应优先接 `@ricky0123/vad-web` 这类基于 Silero VAD + ONNX Runtime Web 的浏览器方案，再接 turn-taking/endpointing。
+- 自动智能打断已从本地 RMS 音量阈值升级为 `@ricky0123/vad-web` / Silero VAD 事件源；仍需用真实 TTS 播放场景做 10 次语音打断验收，并继续调 `positiveSpeechThreshold`、`redemptionFrames`、冷却时间和扬声器回声场景。

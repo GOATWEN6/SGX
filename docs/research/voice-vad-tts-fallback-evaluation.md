@@ -18,12 +18,11 @@
 
 接入切片：
 
-1. 加依赖：`@ricky0123/vad-web` 和随包资源。
-2. 把当前 RMS `startBargeInMonitor` 改成 provider 接口：`rms` 与 `silero` 两种实现可切换。
-3. `onSpeechStart` 时立刻执行 `interruptSpeech('user_speech')`，清空播放队列并取消旧响应。
-4. `onSpeechEnd(audio)` 后续可用于更稳定的端点检测，先不直接替代 realtime provider 音频上传。
-
-暂不本轮安装依赖的原因：需要网络下载 npm 包和 ONNX/WASM 资源，属于外部依赖变更，应单独提交并做浏览器麦克风实测。
+1. 已加依赖：`@ricky0123/vad-web`。
+2. `/voice-assistant` 的 `startBargeInMonitor` 已从 RMS 音量阈值改为 `MicVAD.new(...)`。
+3. `onSpeechStart` 时仍执行我们自己的 `interruptSpeech('user_speech')`，清空播放队列并取消旧响应。
+4. `onSpeechEnd(audio)` 后续可用于更稳定的端点检测，先不直接替代 ASR/realtime provider 音频上传。
+5. 下一步要用真实 TTS 播放场景做 10 次人工打断验收，达不到 9/10 前不标为完成。
 
 ## TTS Fallback
 
