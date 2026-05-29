@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import { Activity, ChevronLeft, MessageCircle, Mic, MoreHorizontal, Send, Volume2, X } from 'lucide-react';
 import { authenticatedFetch, clearAuth, getToken, setAuth } from '@/lib/client-auth';
 import styles from './voice-assistant.module.css';
@@ -89,6 +90,38 @@ class RealtimePcmProcessor extends AudioWorkletProcessor {
 }
 registerProcessor('realtime-pcm-processor', RealtimePcmProcessor);
 `;
+
+function PonyAvatarImage() {
+  const [avatarSrc, setAvatarSrc] = useState('/avatars/独角兽.png');
+  const [imageFailed, setImageFailed] = useState(false);
+
+  if (imageFailed) {
+    return (
+      <div className={styles.ponyAvatarFallback} aria-label="小鹿光年小马形象占位">
+        小鹿
+      </div>
+    );
+  }
+
+  return (
+    <Image
+      className={styles.ponyAvatarImage}
+      src={avatarSrc}
+      alt="小鹿光年小马形象"
+      width={220}
+      height={220}
+      priority
+      draggable={false}
+      onError={() => {
+        if (avatarSrc !== '/avatars/pony-original.png') {
+          setAvatarSrc('/avatars/pony-original.png');
+          return;
+        }
+        setImageFailed(true);
+      }}
+    />
+  );
+}
 
 function pickBestSpeechRecognitionAlternative(result: any) {
   let bestAlternative = result?.[0];
@@ -1515,38 +1548,7 @@ export default function VoiceAssistantPage() {
             <div className={styles.avatarStarOne} />
             <div className={styles.avatarStarTwo} />
             <div className={styles.avatarFigure}>
-              <div className={styles.avatarHand} />
-              <div className={styles.avatarBody}>
-                <div className={styles.avatarCollar} />
-                <div className={styles.avatarInnerShirt} />
-                <div className={styles.avatarChestLine} />
-              </div>
-              <div className={styles.avatarNeck} />
-              <div className={styles.avatarHairBack} />
-              <div className={styles.avatarHead}>
-                <div className={styles.avatarFaceHighlight} />
-                <div className={`${styles.avatarEar} ${styles.avatarEarLeft}`} />
-                <div className={`${styles.avatarEar} ${styles.avatarEarRight}`} />
-                <div className={styles.avatarHairCap} />
-                <div className={styles.avatarFringeLeft} />
-                <div className={styles.avatarFringeRight} />
-                <div className={`${styles.avatarBrow} ${styles.avatarBrowLeft}`} />
-                <div className={`${styles.avatarBrow} ${styles.avatarBrowRight}`} />
-                <div className={`${styles.avatarEye} ${styles.avatarEyeLeft}`}>
-                  <span />
-                </div>
-                <div className={`${styles.avatarEye} ${styles.avatarEyeRight}`}>
-                  <span />
-                </div>
-                <div className={`${styles.avatarCheek} ${styles.avatarCheekLeft}`} />
-                <div className={`${styles.avatarCheek} ${styles.avatarCheekRight}`} />
-                <div className={styles.avatarNose} />
-                <div className={styles.avatarMouth}>
-                  <span className={styles.mouthSmile} />
-                  <span className={styles.mouthOpen} />
-                  <span className={styles.mouthWide} />
-                </div>
-              </div>
+              <PonyAvatarImage />
             </div>
             <div className={styles.avatarListeningRing} />
           </div>
