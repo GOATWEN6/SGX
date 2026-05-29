@@ -295,13 +295,14 @@ async function staticFrontendChecks() {
   expect(ttsRouteSource.includes('synthesizeSpeech'), '服务端 TTS fallback 有独立 API 路由');
   expect(ttsConfigSource.includes('DOUBAO_TTS_API_KEY') && ttsConfigSource.includes('seed-tts-1.0'), '服务端 TTS fallback 默认优先支持豆包 TTS');
   expect(doubaoTtsProviderSource.includes('X-Api-Resource-Id') && doubaoTtsProviderSource.includes('req_params'), '豆包 TTS provider 使用火山 V3 TTS 请求头和 req_params');
-  expect(doubaoTtsProviderSource.includes("namespace: 'BidirectionalTTS'") && doubaoTtsProviderSource.includes('model: config.model'), '豆包 TTS provider 发送 namespace 和模型字段');
+  expect(doubaoTtsProviderSource.includes("namespace: 'BidirectionalTTS'") && doubaoTtsProviderSource.includes('isSupportedReqModel') && doubaoTtsProviderSource.includes('reqParams.model = config.model'), '豆包 TTS provider 只在 V3 支持时发送 namespace 和模型字段');
   expect(ttsConfigSource.includes('MINIMAX_TTS_MODEL') && ttsConfigSource.includes('speech-2.8-turbo'), '服务端 TTS fallback 保留 MiniMax Speech 2.8 Turbo 备选');
   expect(minimaxTtsProviderSource.includes('task_continue'), 'MiniMax TTS provider 使用 WebSocket task_continue 发送文本');
   expect(standalonePageSource.includes('startMicMeter'), '独立页面包含麦克风音量波动检测');
   expect(standalonePageSource.includes('autoBargeInEnabled'), '独立页面把自动打断做成显式开关');
   expect(standalonePageSource.includes('useState(true);') && standalonePageSource.includes('setAutoBargeInEnabled'), '独立页面默认开启自动语音打断');
   expect(standalonePageSource.includes("import('@ricky0123/vad-web')") && standalonePageSource.includes('MicVAD.new'), '独立页面使用 @ricky0123/vad-web / Silero VAD 做自动语音打断');
+  expect(standalonePageSource.includes("baseAssetPath: VAD_ASSET_BASE_PATH") && standalonePageSource.includes("onnxWASMBasePath: VAD_ONNX_WASM_BASE_PATH"), '独立页面显式从 public /vad 加载 Silero VAD 和 ONNX wasm 资源');
   expect(standalonePageSource.includes('positiveSpeechThreshold') && standalonePageSource.includes('redemptionMs'), '独立页面配置 Silero VAD 阈值和冷却参数减少误触发');
   expect(standalonePageSource.includes('lastAutoInterruptAtRef'), '独立页面对自动打断做冷却防抖');
   expect(standalonePageSource.includes('setAutoBargeInEnabled(false)'), '独立页面在自动打断无麦克风权限时会降级关闭');

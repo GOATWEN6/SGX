@@ -188,6 +188,7 @@ async function runStaticContractChecks() {
   expect(voiceAssistantPageSource.includes('autoBargeInEnabled'), 'voice assistant page gates experimental auto barge-in');
   expect(voiceAssistantPageSource.includes('useState(true);') && voiceAssistantPageSource.includes('setAutoBargeInEnabled'), 'voice assistant page enables auto barge-in by default');
   expect(voiceAssistantPageSource.includes("import('@ricky0123/vad-web')") && voiceAssistantPageSource.includes('MicVAD.new'), 'voice assistant page uses @ricky0123/vad-web / Silero VAD for auto barge-in');
+  expect(voiceAssistantPageSource.includes("baseAssetPath: VAD_ASSET_BASE_PATH") && voiceAssistantPageSource.includes("onnxWASMBasePath: VAD_ONNX_WASM_BASE_PATH"), 'voice assistant page serves Silero VAD and ONNX wasm assets from public /vad');
   expect(voiceAssistantPageSource.includes('positiveSpeechThreshold') && voiceAssistantPageSource.includes('redemptionMs'), 'voice assistant page tunes Silero VAD thresholds and cooldown behavior');
   expect(voiceAssistantPageSource.includes('lastAutoInterruptAtRef'), 'voice assistant page debounces automatic barge-in interrupts');
   expect(voiceAssistantPageSource.includes('setAutoBargeInEnabled(false)'), 'voice assistant page disables auto barge-in when mic permission is unavailable');

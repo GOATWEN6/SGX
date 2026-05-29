@@ -71,6 +71,8 @@ const REALTIME_PCM_SAMPLE_RATE = 16000;
 const REALTIME_PCM_CHANNELS = 1;
 const REALTIME_PCM_CHUNK_MS = 120;
 const REALTIME_PCM_CHUNK_SAMPLES = Math.round((REALTIME_PCM_SAMPLE_RATE * REALTIME_PCM_CHUNK_MS) / 1000);
+const VAD_ASSET_BASE_PATH = '/vad/';
+const VAD_ONNX_WASM_BASE_PATH = '/vad/';
 const REALTIME_PCM_WORKLET_SOURCE = `
 class RealtimePcmProcessor extends AudioWorkletProcessor {
   process(inputs) {
@@ -857,6 +859,8 @@ export default function VoiceAssistantPage() {
       const { MicVAD } = await import('@ricky0123/vad-web');
       const vad = await MicVAD.new({
         model: 'v5',
+        baseAssetPath: VAD_ASSET_BASE_PATH,
+        onnxWASMBasePath: VAD_ONNX_WASM_BASE_PATH,
         startOnLoad: false,
         processorType: 'AudioWorklet',
         positiveSpeechThreshold: 0.78,
