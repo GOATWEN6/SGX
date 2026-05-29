@@ -175,8 +175,8 @@ async function runStaticContractChecks() {
     'voice assistant page validates an existing local token before creating conversation sessions'
   );
   expect(voiceTtsRouteSource.includes('synthesizeSpeech'), 'voice TTS route calls the provider abstraction');
-  expect(voiceTtsConfigSource.includes('DOUBAO_TTS_API_KEY') && voiceTtsConfigSource.includes('seed-tts-1.0'), 'TTS config defaults to Doubao high-quality TTS fallback');
-  expect(voiceTtsConfigSource.includes('DOUBAO_TTS_SPEAKER') && voiceTtsConfigSource.includes('BV123_streaming'), 'TTS config exposes Doubao speaker selection');
+  expect(voiceTtsConfigSource.includes('DOUBAO_TTS_API_KEY') && voiceTtsConfigSource.includes('seed-tts-2.0'), 'TTS config defaults to Doubao high-quality TTS fallback');
+  expect(voiceTtsConfigSource.includes('DOUBAO_TTS_SPEAKER') && voiceTtsConfigSource.includes('zh_female_vv_uranus_bigtts'), 'TTS config exposes Doubao Vivi 2.0 speaker selection');
   expect(doubaoTtsProviderSource.includes('/api/v3/tts/unidirectional') || doubaoTtsProviderSource.includes('X-Api-Resource-Id'), 'Doubao TTS provider uses Volcengine V3 TTS request headers');
   expect(doubaoTtsProviderSource.includes('req_params') && doubaoTtsProviderSource.includes('speaker'), 'Doubao TTS provider sends text and speaker through req_params');
   expect(doubaoTtsProviderSource.includes("namespace: 'BidirectionalTTS'") && doubaoTtsProviderSource.includes('isSupportedReqModel'), 'Doubao TTS provider conditionally sends only supported V3 req_params.model values');

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Activity, MessageCircle, Mic, Monitor, PhoneOff, Send, Volume2 } from 'lucide-react';
+import { Activity, ChevronLeft, MessageCircle, Mic, MoreHorizontal, Send, Volume2, X } from 'lucide-react';
 import { authenticatedFetch, clearAuth, getToken, setAuth } from '@/lib/client-auth';
 import styles from './voice-assistant.module.css';
 
@@ -63,6 +63,8 @@ const stateLabel: Record<VoiceState, string> = {
   interrupted: '已打断',
   error: '需要重试',
 };
+
+const ASSISTANT_NAME = '光光';
 
 const SPEECH_COMMIT_DELAY_MS = 1200;
 const SPEECH_COMMIT_DELAY_SECONDS = Math.round(SPEECH_COMMIT_DELAY_MS / 100) / 10;
@@ -1170,7 +1172,7 @@ export default function VoiceAssistantPage() {
         if (nextFallbackMode) void loadTtsStatus(true).catch(() => {});
       }
 
-      const greeting = '您好，我是这个页面里的 AI 语音助手。您可以直接说话，也可以打字测试。';
+      const greeting = `您好，我是${ASSISTANT_NAME}。您可以直接说话，也可以打字测试。`;
       setMessages([{ role: 'assistant', content: greeting, timestamp: new Date().toISOString() }]);
       setVoiceState('idle');
     } catch (error) {
@@ -1482,9 +1484,20 @@ export default function VoiceAssistantPage() {
     <main className={styles.page}>
       <section className={styles.callWindow}>
         <header className={styles.windowBar}>
-          <div className={styles.windowDots} aria-hidden="true">
-            <span />
-            <span />
+          <div className={styles.phoneStatus} aria-hidden="true">
+            <span>08:55</span>
+            <span className={styles.dynamicIsland}><i /></span>
+            <span className={styles.statusIcons}>▮▮▮  WiFi  82</span>
+          </div>
+          <div className={styles.appHeader}>
+            <button className={styles.backButton} type="button" onClick={endCall} title="返回并保存">
+              <ChevronLeft size={34} />
+            </button>
+            <h1>{ASSISTANT_NAME}</h1>
+            <div className={styles.headerPill} aria-hidden="true">
+              <MoreHorizontal size={30} />
+              <span />
+            </div>
           </div>
           <div className={styles.status} role="status" aria-live="polite">
             <span className={`${styles.statusDot} ${styles[`state_${voiceState}`] || ''}`} />
@@ -1499,6 +1512,8 @@ export default function VoiceAssistantPage() {
             data-testid="anime-avatar"
           >
             <div className={styles.avatarGlow} />
+            <div className={styles.avatarStarOne} />
+            <div className={styles.avatarStarTwo} />
             <div className={styles.avatarFigure}>
               <div className={styles.avatarHand} />
               <div className={styles.avatarBody}>
@@ -1545,29 +1560,25 @@ export default function VoiceAssistantPage() {
             ))}
           </div>
 
-          <p className={styles.promptText}>
-            {voiceState === 'listening'
-              ? '请开始说话'
-              : voiceState === 'speaking'
-                ? '我正在回答，您直接说话即可打断'
-                : voiceState === 'thinking'
-                  ? '正在生成回复'
-                  : '点击麦克风开始'}
-          </p>
+          <section className={styles.heroBubble} aria-label="光光提示语">
+            <p className={styles.heroText}>
+              {voiceState === 'listening'
+                ? '长辈，光光在听，慢慢说就好～'
+                : voiceState === 'speaking'
+                  ? '长辈，您直接说话即可打断光光'
+                  : voiceState === 'thinking'
+                    ? '光光正在想一想...'
+                    : '长辈，来和光光聊聊天吧～'}
+            </p>
+          </section>
+
+          <div className={styles.thinkingBadge} aria-hidden={voiceState !== 'thinking'}>
+            <span />
+            {voiceState === 'thinking' ? '光光思考中...' : stateLabel[voiceState]}
+          </div>
         </section>
 
         <section className={styles.callControls} aria-label="语音控制">
-          <button className={styles.iconButton} type="button" title="界面预览">
-            <Monitor size={28} />
-          </button>
-          <button
-            className={`${styles.iconButton} ${showCaptions ? styles.iconButtonActive : ''}`}
-            type="button"
-            title={showCaptions ? '隐藏字幕' : '显示字幕'}
-            onClick={() => setShowCaptions(value => !value)}
-          >
-            <MessageCircle size={28} />
-          </button>
           <button
             className={`${styles.micButton} ${isRecording ? styles.micButtonActive : ''}`}
             onClick={() => startListening()}
@@ -1575,17 +1586,36 @@ export default function VoiceAssistantPage() {
             title={isRecording ? '停止听' : voiceState === 'speaking' ? '打断并说话' : '开始说话'}
           >
             <Mic size={34} />
+            <span>{isRecording ? '麦克风已开' : '麦克风'}</span>
           </button>
+          <button className={styles.hangupButton} onClick={endCall} title="保存并挂断">
+            <X size={34} />
+            <span>保存并挂断</span>
+          </button>
+          <button
+            className={`${styles.captionToggle} ${showCaptions ? styles.captionToggleActive : ''}`}
+            type="button"
+            title={showCaptions ? '隐藏字幕' : '显示字幕'}
+            onClick={() => setShowCaptions(value => !value)}
+          >
+            <span>字</span>
+            <small>{showCaptions ? '字幕已开' : '字幕关闭'}</small>
+          </button>
+        </section>
+
+        <section className={styles.secondaryControls} aria-label="辅助控制">
           <button
             className={`${styles.iconButton} ${autoBargeInEnabled ? styles.iconButtonActive : ''}`}
             type="button"
             title={autoBargeInEnabled ? '自动语音打断已开启' : '开启自动语音打断'}
             onClick={() => setAutoBargeInEnabled(value => !value)}
           >
-            <Activity size={28} />
+            <Activity size={20} />
+            {autoBargeInEnabled ? '开口自动打断' : '自动打断关闭'}
           </button>
-          <button className={styles.hangupButton} onClick={endCall} title="挂断并重开">
-            <PhoneOff size={30} />
+          <button className={styles.iconButton} type="button" title="文字输入" onClick={() => setShowCaptions(true)}>
+            <MessageCircle size={20} />
+            文字兜底
           </button>
         </section>
 

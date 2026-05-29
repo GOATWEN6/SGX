@@ -45,8 +45,8 @@
 | `VOICE_TTS_PROVIDER` | 否 | `doubao` | 高音色 TTS fallback 供应商。当前可用值：`doubao`、`minimax`、`disabled`。本阶段按你的要求默认走豆包。 |
 | `DOUBAO_TTS_ENDPOINT` | 否 | `https://openspeech.bytedance.com/api/v3/tts/unidirectional` | 豆包语音合成 V3 HTTP Chunked 单向流式接口。服务端收齐音频 chunk 后返回浏览器播放。 |
 | `DOUBAO_TTS_API_KEY` | 是 | 不写入仓库 | 新版火山控制台语音 API Key，对应上游 header `X-Api-Key`。只放 `.env.local` 或部署 secret。 |
-| `DOUBAO_TTS_RESOURCE_ID` | 是 | `seed-tts-1.0` | 上游 header `X-Api-Resource-Id`，决定模型版本和计费 SKU。必须与音色所属模型版本匹配。 |
-| `DOUBAO_TTS_SPEAKER` | 是 | `BV123_streaming` | 豆包 TTS 音色/说话人。默认选“阳光青年”方向，实际以控制台可用音色列表为准。 |
+| `DOUBAO_TTS_RESOURCE_ID` | 是 | `seed-tts-2.0` | 上游 header `X-Api-Resource-Id`，决定模型版本和计费 SKU。必须与音色所属模型版本匹配。 |
+| `DOUBAO_TTS_SPEAKER` | 是 | `zh_female_vv_uranus_bigtts` | 豆包 TTS 音色/说话人。当前按产品测试要求默认选官方 Vivi 2.0，实际以控制台可用音色列表为准。 |
 | `DOUBAO_TTS_FORMAT` | 否 | `mp3` | 输出格式，可选 `mp3`、`wav`、`pcm`、`ogg_opus`。网页 fallback 建议先用 `mp3`。 |
 | `DOUBAO_TTS_SAMPLE_RATE` | 否 | `24000` | 输出采样率。 |
 | `DOUBAO_TTS_SPEED` | 否 | `0.95` | 语速。银发陪伴场景略慢一点更稳。 |

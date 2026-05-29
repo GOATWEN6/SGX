@@ -40,8 +40,8 @@ const DEFAULT_MINIMAX_ENDPOINT = 'wss://api.minimaxi.com/ws/v1/t2a_v2';
 const DEFAULT_MINIMAX_MODEL = 'speech-2.8-turbo';
 const DEFAULT_MINIMAX_VOICE_ID = 'male-qn-qingse';
 const DEFAULT_DOUBAO_TTS_ENDPOINT = 'https://openspeech.bytedance.com/api/v3/tts/unidirectional';
-const DEFAULT_DOUBAO_TTS_RESOURCE_ID = 'seed-tts-1.0';
-const DEFAULT_DOUBAO_TTS_SPEAKER = 'BV123_streaming';
+const DEFAULT_DOUBAO_TTS_RESOURCE_ID = 'seed-tts-2.0';
+const DEFAULT_DOUBAO_TTS_SPEAKER = 'zh_female_vv_uranus_bigtts';
 
 function readEnv(...names: string[]): string | undefined {
   for (const name of names) {

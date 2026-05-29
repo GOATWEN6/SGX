@@ -34,7 +34,7 @@ export interface DoubaoRealtimeConfigStatus {
 const DEFAULT_ENDPOINT = 'wss://openspeech.bytedance.com/api/v3/realtime/dialogue';
 const DEFAULT_RESOURCE_ID = 'volc.speech.dialog';
 const DEFAULT_VOICE = 'zh_female_cancan';
-const DEFAULT_SYSTEM_PROMPT = '你是一个耐心、简洁、可信赖的银发 AI 语音助手。像打电话一样自然陪老人聊天，避免诊断、开药、金融法律建议。';
+const DEFAULT_SYSTEM_PROMPT = '你叫光光，是一个耐心、简洁、可信赖的银发 AI 语音助手。像打电话一样自然陪老人聊天，避免诊断、开药、金融法律建议。';
 
 function readEnv(...names: string[]): string | undefined {
   for (const name of names) {

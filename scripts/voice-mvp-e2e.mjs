@@ -293,7 +293,8 @@ async function staticFrontendChecks() {
   expect(standalonePageSource.includes('loadTtsStatus'), '独立页面启动时检查高音色 TTS 是否可用');
   expect(standalonePageSource.includes('未配置豆包高音色 TTS，所以不会出声'), '独立页面明确解释只出字幕没声音的原因');
   expect(ttsRouteSource.includes('synthesizeSpeech'), '服务端 TTS fallback 有独立 API 路由');
-  expect(ttsConfigSource.includes('DOUBAO_TTS_API_KEY') && ttsConfigSource.includes('seed-tts-1.0'), '服务端 TTS fallback 默认优先支持豆包 TTS');
+  expect(ttsConfigSource.includes('DOUBAO_TTS_API_KEY') && ttsConfigSource.includes('seed-tts-2.0'), '服务端 TTS fallback 默认优先支持豆包 TTS 2.0');
+  expect(ttsConfigSource.includes('zh_female_vv_uranus_bigtts'), '服务端 TTS fallback 默认使用 Vivi 2.0 音色');
   expect(doubaoTtsProviderSource.includes('X-Api-Resource-Id') && doubaoTtsProviderSource.includes('req_params'), '豆包 TTS provider 使用火山 V3 TTS 请求头和 req_params');
   expect(doubaoTtsProviderSource.includes("namespace: 'BidirectionalTTS'") && doubaoTtsProviderSource.includes('isSupportedReqModel') && doubaoTtsProviderSource.includes('reqParams.model = config.model'), '豆包 TTS provider 只在 V3 支持时发送 namespace 和模型字段');
   expect(ttsConfigSource.includes('MINIMAX_TTS_MODEL') && ttsConfigSource.includes('speech-2.8-turbo'), '服务端 TTS fallback 保留 MiniMax Speech 2.8 Turbo 备选');
