@@ -142,7 +142,7 @@ async function createTestUser(): Promise<string> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       action: 'create',
-      name: '语音助手测试老人',
+      name: '长辈',
       ageGroup: '75-80',
       gender: 'prefer_not_to_say',
       birthPlace: '本地测试',

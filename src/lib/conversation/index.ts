@@ -39,12 +39,16 @@ function buildSystemPrompt(params: {
   memoryContext: string;
   searchContext?: string;
   riskFlags: string[];
+  shouldIntroduceSelf: boolean;
 }): string {
   const pronoun = params.useHonorific ? '您' : '你';
+  const displayName = normalizeUserDisplayName(params.userName);
   return [
     '你是银发 AI 相框里的陪伴型 AI，名字叫「光光」，只服务于老人和家庭回忆场景。',
-    '需要自我介绍时说“我是光光”；平时不要反复报名字。',
-    `请称呼老人为「${params.userName}」，默认使用「${pronoun}」。`,
+    params.shouldIntroduceSelf
+      ? '这是本次会话里你的第一轮正式回复，可以自然说一次“我是光光”。'
+      : '这不是第一轮回复。除非用户直接问你是谁、叫什么、是什么助手，否则不要自我介绍，不要说“我是光光”，也不要解释自己的角色设定。',
+    `默认使用「${pronoun}」和老人说话。不要每轮开头都固定称呼老人；确实需要称呼时，用「${displayName}」。`,
     '回复要短句、慢节奏、口语化、温和低压力。一次最多问一个轻量追问。',
     '不要假扮子女，不要说“这是你儿子/女儿让我问的”。',
     '不要提供医疗诊断、用药剂量、投资建议、法律结论。遇到高风险问题，引导咨询家人或专业人士。',
@@ -55,17 +59,29 @@ function buildSystemPrompt(params: {
   ].filter(Boolean).join('\n\n');
 }
 
+function normalizeUserDisplayName(userName: string): string {
+  const cleanName = userName.trim();
+  if (!cleanName || /测试|语音助手|老人/.test(cleanName)) return '长辈';
+  return cleanName;
+}
+
+function buildAddressPrefix(userName: string): string {
+  const displayName = normalizeUserDisplayName(userName);
+  return displayName === '长辈' ? '' : `${displayName}，`;
+}
+
 function buildFallbackReply(userName: string, message: string, riskFlags: string[], usedSearch: boolean): string {
+  const addressPrefix = buildAddressPrefix(userName);
   if (riskFlags.includes('high_risk_professional_advice')) {
-    return `${userName}，这个问题可能关系到身体、用药或重要决定。我不能替您下结论。您可以先把情况告诉家人，必要时问医生或专业人士。我可以陪您把想问的问题整理清楚。`;
+    return `${addressPrefix}这个问题可能关系到身体、用药或重要决定。我不能替您下结论。您可以先把情况告诉家人，必要时问医生或专业人士。我可以陪您把想问的问题整理清楚。`;
   }
   if (usedSearch) {
-    return `${userName}，这个问题需要实时信息。我这边已经按生活信息查询流程处理，但当前实时搜索服务还没配置好。我们可以先聊个大概，等网络信息确认后再看准确结果。`;
+    return `${addressPrefix}这个问题需要实时信息。我这边已经按生活信息查询流程处理，但当前实时搜索服务还没配置好。我们可以先聊个大概，等网络信息确认后再看准确结果。`;
   }
   if (/不想聊|别再提|不要再提/.test(message)) {
-    return `好的，${userName}，我记住这个边界。以后我不会主动往这个方向问。我们换个轻松点的话题，您现在想听听照片里的故事，还是随便聊几句？`;
+    return `好的，我记住这个边界。以后我不会主动往这个方向问。我们换个轻松点的话题，您现在想听听照片里的故事，还是随便聊几句？`;
   }
-  return `${userName}，我听到了。我们慢慢聊，不着急。您刚才说的这点挺重要，我想轻轻问一句：这件事当时最让您记得的是什么？`;
+  return '我听到了。我们慢慢聊，不着急。您刚才说的这点挺重要，我想轻轻问一句：这件事当时最让您记得的是什么？';
 }
 
 export function buildConversationFallbackReply(
@@ -132,6 +148,8 @@ export async function prepareConversationTurn(params: {
   }
 
   const text = params.message.trim();
+  const messagesBeforeTurn = getSessionMessages(session.id);
+  const shouldIntroduceSelf = !messagesBeforeTurn.some(message => message.role === 'assistant');
   const userMessage = addMessage({
     sessionId: session.id,
     role: 'user',
@@ -161,6 +179,7 @@ export async function prepareConversationTurn(params: {
     memoryContext,
     searchContext: searchResult?.answerContext,
     riskFlags,
+    shouldIntroduceSelf,
   });
   const userPrompt = [
     `最近对话：\n${recentHistory}`,
@@ -176,7 +195,7 @@ export async function prepareConversationTurn(params: {
 
   return {
     userId: params.userId,
-    userName: user.name,
+    userName: normalizeUserDisplayName(user.name),
     session,
     text,
     systemPrompt,
