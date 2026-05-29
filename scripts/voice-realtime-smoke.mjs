@@ -179,7 +179,8 @@ async function runStaticContractChecks() {
   expect(voiceTtsConfigSource.includes('DOUBAO_TTS_SPEAKER') && voiceTtsConfigSource.includes('BV123_streaming'), 'TTS config exposes Doubao speaker selection');
   expect(doubaoTtsProviderSource.includes('/api/v3/tts/unidirectional') || doubaoTtsProviderSource.includes('X-Api-Resource-Id'), 'Doubao TTS provider uses Volcengine V3 TTS request headers');
   expect(doubaoTtsProviderSource.includes('req_params') && doubaoTtsProviderSource.includes('speaker'), 'Doubao TTS provider sends text and speaker through req_params');
-  expect(doubaoTtsProviderSource.includes("namespace: 'BidirectionalTTS'") && doubaoTtsProviderSource.includes('model: config.model'), 'Doubao TTS provider sends namespace and model in the V3 request body');
+  expect(doubaoTtsProviderSource.includes("namespace: 'BidirectionalTTS'") && doubaoTtsProviderSource.includes('isSupportedReqModel'), 'Doubao TTS provider conditionally sends only supported V3 req_params.model values');
+  expect(doubaoTtsProviderSource.includes('toDoubaoScaleRate(config.speed)') && doubaoTtsProviderSource.includes('loudness_rate'), 'Doubao TTS provider converts speed/volume/pitch to Volcengine int32 scale rates');
   expect(doubaoTtsProviderSource.includes('parseConcatenatedJsonObjects'), 'Doubao TTS provider parses chunked JSON audio responses');
   expect(voiceTtsConfigSource.includes('MINIMAX_TTS_MODEL') && voiceTtsConfigSource.includes('speech-2.8-turbo'), 'TTS config supports MiniMax Speech 2.8 Turbo');
   expect(voiceTtsConfigSource.includes('MINIMAX_TTS_API_KEY'), 'TTS config supports MiniMax API key alias for local setup');

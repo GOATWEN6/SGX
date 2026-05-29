@@ -85,6 +85,18 @@ function getBase64Audio(chunk: DoubaoTtsChunk): string | undefined {
   return undefined;
 }
 
+function toDoubaoScaleRate(value: number): number {
+  const normalized = Number.isFinite(value) ? value : 1;
+  const rate = normalized >= 0.5 && normalized <= 2
+    ? Math.round((normalized - 1) * 100)
+    : Math.round(normalized);
+  return Math.max(-50, Math.min(100, rate));
+}
+
+function isSupportedReqModel(model: string): boolean {
+  return model === 'seed-tts-2.0-standard' || model === 'seed-tts-2.0-expressive';
+}
+
 function throwIfProviderError(chunk: DoubaoTtsChunk): void {
   const code = chunk?.code ?? chunk?.status_code ?? chunk?.data?.code;
   const message = chunk?.message ?? chunk?.status_msg ?? chunk?.data?.message;
@@ -116,6 +128,20 @@ export async function synthesizeWithDoubaoTts(
   const requestId = randomUUID();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.synthesisTimeoutMs);
+  const reqParams: Record<string, any> = {
+    text: normalizedText,
+    speaker: config.voiceId,
+    audio_params: {
+      format: config.outputFormat,
+      sample_rate: config.sampleRate,
+      speech_rate: toDoubaoScaleRate(config.speed),
+      loudness_rate: toDoubaoScaleRate(config.volume),
+      pitch_rate: toDoubaoScaleRate(config.pitch),
+    },
+  };
+  if (isSupportedReqModel(config.model)) {
+    reqParams.model = config.model;
+  }
 
   try {
     const response = await fetch(config.endpoint, {
@@ -127,18 +153,7 @@ export async function synthesizeWithDoubaoTts(
           uid: 'sgx-voice-assistant',
         },
         namespace: 'BidirectionalTTS',
-        req_params: {
-          text: normalizedText,
-          model: config.model,
-          speaker: config.voiceId,
-          audio_params: {
-            format: config.outputFormat,
-            sample_rate: config.sampleRate,
-            speech_rate: config.speed,
-            volume: config.volume,
-            pitch_rate: config.pitch,
-          },
-        },
+        req_params: reqParams,
       }),
     });
 
